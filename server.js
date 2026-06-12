@@ -1,0 +1,368 @@
+'use strict';
+
+require('dotenv').config();
+
+const http = require('http');
+const crypto = require('crypto');
+const express = require('express');
+const { WebSocketServer } = require('ws');
+const path = require('path');
+const fs = require('fs');
+const fsPromises = require('fs/promises');
+
+const { verifyToken, hashPassword, assertSecretConfigured } = require('./lib/auth');
+const {
+  PORT,
+  DOWNLOAD_DIR,
+  DATA_DIR,
+  USERS_FILE,
+  PUBLIC_DIR,
+  AUTO_CLEAR_COMPLETED,
+  AUTO_CLEAR_DELAY_SEC,
+  aria2,
+} = require('./lib/config');
+
+// Fail fast if the JWT secret is missing or left at the insecure default.
+assertSecretConfigured();
+
+// ── Express App ─────────────────────────────────────────────────────────
+const app = express();
+
+// Trust the first proxy hop so req.ip reflects the real client (used by the
+// login rate limiter). Adjust if you run behind multiple proxies.
+app.set('trust proxy', 1);
+
+// Basic security response headers (lightweight alternative to helmet).
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-XSS-Protection', '0');
+  next();
+});
+
+// Cap request body size to mitigate memory-exhaustion DoS.
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// Serve static files from public/
+app.use(express.static(PUBLIC_DIR));
+
+// Mount API routes
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/downloads', require('./routes/downloads'));
+app.use('/api/files', require('./routes/files'));
+app.use('/api/stream', require('./routes/stream'));
+app.use('/api/system', require('./routes/system'));
+app.use('/api/remotes', require('./routes/remotes'));
+
+// Unknown API routes return JSON 404 (not the SPA HTML fallback below).
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'API endpoint not found' });
+});
+
+// SPA fallback: serve index.html for any non-API GET request
+app.get('*', (req, res) => {
+  const indexPath = path.join(PUBLIC_DIR, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).json({ error: 'Frontend not found. Place index.html in public/' });
+  }
+});
+
+// ── HTTP Server ─────────────────────────────────────────────────────────
+const server = http.createServer(app);
+
+// ── WebSocket Server ────────────────────────────────────────────────────
+const wss = new WebSocketServer({ server });
+
+// Track authenticated connections
+const authenticatedClients = new Set();
+
+wss.on('connection', (ws) => {
+  let isAuthenticated = false;
+  let username = 'unknown';
+
+  console.log('[MagnetFlow] WebSocket client connected');
+
+  ws.on('message', (data) => {
+    let message;
+    try {
+      message = JSON.parse(data.toString());
+    } catch {
+      return; // Ignore malformed messages
+    }
+
+    if (message.type === 'auth' && message.token) {
+      try {
+        const decoded = verifyToken(message.token);
+        isAuthenticated = true;
+        username = decoded.username || 'unknown';
+        authenticatedClients.add(ws);
+
+        ws.send(JSON.stringify({
+          type: 'auth',
+          success: true,
+          message: 'Authenticated successfully',
+        }));
+
+        console.log(`[MagnetFlow] WebSocket authenticated: ${username}`);
+      } catch {
+        ws.send(JSON.stringify({
+          type: 'auth',
+          success: false,
+          message: 'Invalid or expired token',
+        }));
+      }
+      return;
+    }
+
+    // Any non-auth message before authentication is rejected.
+    if (!isAuthenticated) {
+      ws.send(JSON.stringify({
+        type: 'error',
+        message: 'Authentication required',
+      }));
+    }
+    // (No other client message types are currently handled.)
+  });
+
+  ws.on('close', () => {
+    isAuthenticated = false;
+    authenticatedClients.delete(ws);
+    console.log(`[MagnetFlow] WebSocket disconnected: ${username}`);
+  });
+
+  ws.on('error', (err) => {
+    console.error(`[MagnetFlow] WebSocket error (${username}):`, err.message);
+    authenticatedClients.delete(ws);
+  });
+});
+
+/**
+ * Broadcast a message to all authenticated WebSocket clients.
+ * @param {object} data - Data to broadcast (will be JSON.stringify'd)
+ */
+function broadcast(data) {
+  const payload = JSON.stringify(data);
+  for (const client of authenticatedClients) {
+    if (client.readyState === 1) { // WebSocket.OPEN
+      try {
+        client.send(payload);
+      } catch {
+        authenticatedClients.delete(client);
+      }
+    } else {
+      authenticatedClients.delete(client);
+    }
+  }
+}
+
+// Poll aria2 every 2 seconds and broadcast download status
+let pollingInterval = null;
+
+// Tracks when each completed download was first observed, so we can keep it
+// visible for a short grace period before auto-clearing its record.
+const completedFirstSeen = new Map();
+
+/**
+ * Auto-clear completed download *records* (files on disk are kept).
+ * Uses aria2.removeDownloadResult, which never deletes downloaded files.
+ * Error/removed records are left untouched so failures stay visible.
+ * @param {object[]} stopped - aria2 tellStopped result
+ */
+async function autoClearCompleted(stopped) {
+  if (!AUTO_CLEAR_COMPLETED) return;
+  const now = Date.now();
+  const delayMs = AUTO_CLEAR_DELAY_SEC * 1000;
+  const present = new Set();
+
+  for (const dl of stopped) {
+    if (dl.status !== 'complete') continue;
+    present.add(dl.gid);
+
+    let firstSeen = completedFirstSeen.get(dl.gid);
+    if (firstSeen === undefined) {
+      firstSeen = now;
+      completedFirstSeen.set(dl.gid, now);
+    }
+
+    if (now - firstSeen >= delayMs) {
+      try {
+        await aria2.removeDownloadResult(dl.gid);
+        completedFirstSeen.delete(dl.gid);
+        console.log(`[MagnetFlow] Auto-cleared completed record (files kept): gid=${dl.gid}`);
+      } catch {
+        // Already gone or aria2 hiccup — drop tracking and move on.
+        completedFirstSeen.delete(dl.gid);
+      }
+    }
+  }
+
+  // Forget gids that are no longer in the stopped list.
+  for (const gid of completedFirstSeen.keys()) {
+    if (!present.has(gid)) completedFirstSeen.delete(gid);
+  }
+}
+
+function startPolling() {
+  pollingInterval = setInterval(async () => {
+    const needBroadcast = authenticatedClients.size > 0;
+    // Keep polling for auto-clear even when nobody is watching.
+    if (!needBroadcast && !AUTO_CLEAR_COMPLETED) return;
+
+    try {
+      const [active, waiting, stopped, stats] = await Promise.all([
+        aria2.tellActive(),
+        aria2.tellWaiting(0, 100),
+        aria2.tellStopped(0, 100),
+        aria2.getGlobalStat(),
+      ]);
+
+      await autoClearCompleted(stopped);
+
+      if (needBroadcast) {
+        broadcast({
+          type: 'downloads',
+          data: { active, waiting, stopped, stats },
+        });
+      }
+    } catch {
+      // aria2 might not be running — silently ignore
+    }
+  }, 2000);
+
+  const clearMsg = AUTO_CLEAR_COMPLETED
+    ? `auto-clear completed records after ${AUTO_CLEAR_DELAY_SEC}s (files kept)`
+    : 'auto-clear disabled';
+  console.log(`[MagnetFlow] Download status polling started (2s interval, ${clearMsg})`);
+}
+
+// ── Startup Initialization ──────────────────────────────────────────────
+
+async function initialize() {
+  // Create download directory if it doesn't exist
+  try {
+    await fsPromises.mkdir(DOWNLOAD_DIR, { recursive: true });
+    console.log(`[MagnetFlow] Download directory ready: ${DOWNLOAD_DIR}`);
+  } catch (err) {
+    console.error(`[MagnetFlow] Failed to create download directory: ${err.message}`);
+  }
+
+  // Create data directory if it doesn't exist
+  try {
+    await fsPromises.mkdir(DATA_DIR, { recursive: true });
+  } catch {
+    // directory may already exist
+  }
+
+  // Create public directory if it doesn't exist
+  try {
+    await fsPromises.mkdir(PUBLIC_DIR, { recursive: true });
+  } catch {
+    // directory may already exist
+  }
+
+  // Create default users.json if it doesn't exist
+  try {
+    await fsPromises.access(USERS_FILE);
+    console.log('[MagnetFlow] Users database found');
+  } catch {
+    // File doesn't exist — create with default admin user.
+    // Use INITIAL_ADMIN_PASSWORD if provided, otherwise generate a strong
+    // random one and print it ONCE so there is no shared weak default.
+    console.log('[MagnetFlow] Creating default users database...');
+    const initialPassword =
+      process.env.INITIAL_ADMIN_PASSWORD || crypto.randomBytes(12).toString('base64url');
+    const defaultPasswordHash = await hashPassword(initialPassword);
+    const defaultUsers = {
+      users: [
+        {
+          username: 'admin',
+          password: defaultPasswordHash,
+        },
+      ],
+    };
+
+    await fsPromises.writeFile(
+      USERS_FILE,
+      JSON.stringify(defaultUsers, null, 2),
+      'utf-8'
+    );
+
+    console.log('');
+    console.log('  ┌──────────────────────────────────────────────────────┐');
+    console.log('  │  INITIAL ADMIN CREDENTIALS (shown only once)           │');
+    console.log('  │  username: admin                                       │');
+    console.log(`  │  password: ${initialPassword.padEnd(44)}│`);
+    console.log('  │  Log in and change this password immediately.          │');
+    console.log('  └──────────────────────────────────────────────────────┘');
+    console.log('');
+  }
+
+  // Start the server
+  server.listen(PORT, () => {
+    console.log('');
+    console.log('  ╔══════════════════════════════════════════╗');
+    console.log('  ║          MagnetFlow Server               ║');
+    console.log('  ╠══════════════════════════════════════════╣');
+    console.log(`  ║  🌐 HTTP:  http://localhost:${PORT}          ║`);
+    console.log(`  ║  📁 Downloads: ${DOWNLOAD_DIR.padEnd(23)} ║`);
+    console.log('  ║  🔌 WebSocket: enabled                   ║');
+    console.log('  ╚══════════════════════════════════════════╝');
+    console.log('');
+  });
+
+  // Start polling aria2
+  startPolling();
+
+  // Check aria2 connectivity
+  try {
+    const version = await aria2.getVersion();
+    console.log(`[MagnetFlow] Connected to aria2 v${version.version}`);
+  } catch {
+    console.warn('[MagnetFlow] ⚠ aria2 is not reachable. Downloads will fail until aria2 is started.');
+  }
+}
+
+// ── Graceful Shutdown ───────────────────────────────────────────────────
+
+function shutdown(signal) {
+  console.log(`\n[MagnetFlow] Received ${signal}. Shutting down gracefully...`);
+
+  if (pollingInterval) {
+    clearInterval(pollingInterval);
+  }
+
+  // Close all WebSocket connections
+  for (const client of authenticatedClients) {
+    try {
+      client.close(1001, 'Server shutting down');
+    } catch {
+      // ignore
+    }
+  }
+
+  wss.close(() => {
+    server.close(() => {
+      console.log('[MagnetFlow] Server stopped.');
+      process.exit(0);
+    });
+  });
+
+  // Force exit after 5 seconds
+  setTimeout(() => {
+    console.error('[MagnetFlow] Forced shutdown after timeout');
+    process.exit(1);
+  }, 5000);
+}
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+// Start the application
+initialize().catch((err) => {
+  console.error('[MagnetFlow] Fatal initialization error:', err);
+  process.exit(1);
+});

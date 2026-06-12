@@ -1,0 +1,22 @@
+{
+  "name": "magnet-flow",
+  "version": "2.0.0",
+  "description": "Self-hosted magnet download, streaming & file management platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^2.4.3",
+    "ws": "^8.18.0",
+    "dotenv": "^16.4.5",
+    "mime-types": "^2.1.35"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

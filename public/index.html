@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MagnetFlow - 磁力下载管理</title>
+  <meta name="description" content="Self-hosted magnet download and streaming platform">
+  <meta name="theme-color" content="#5e5ce6">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/svg+xml" href="/img/logo.svg">
+  <link rel="apple-touch-icon" href="/img/icon-512.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css?v=2.5">
+</head>
+<body>
+
+  <!-- Login Page -->
+  <div id="login-page" class="login-page hidden">
+    <div class="login-bg"></div>
+    <div class="login-card">
+      <div class="login-logo">
+        <img class="login-logo-icon" src="/img/logo.svg" alt="MagnetFlow">
+        <h1 class="login-title">MagnetFlow</h1>
+        <p class="login-subtitle">磁力下载 · 在线串流 · 文件管理</p>
+      </div>
+      <form id="login-form" class="login-form" autocomplete="on">
+        <div class="form-group">
+          <label class="form-label" for="login-username">用户名</label>
+          <input type="text" id="login-username" class="form-input" placeholder="请输入用户名" autocomplete="username" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="login-password">密码</label>
+          <input type="password" id="login-password" class="form-input" placeholder="请输入密码" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="btn-primary btn-login" id="btn-login">
+          <span class="btn-text">登 录</span>
+          <span class="btn-spinner hidden"></span>
+        </button>
+        <p id="login-error" class="login-error hidden"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main App -->
+  <div id="app" class="app-layout hidden">
+    <!-- Mobile Header -->
+    <header class="mobile-header" id="mobile-header">
+      <button class="btn-hamburger" id="btn-hamburger">
+        <span></span><span></span><span></span>
+      </button>
+      <span class="mobile-logo"><img src="/img/logo.svg" alt="">MagnetFlow</span>
+    </header>
+
+    <!-- Sidebar Overlay (mobile) -->
+    <div class="sidebar-overlay hidden" id="sidebar-overlay"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <img class="logo-icon" src="/img/logo.svg" alt="">
+          <span class="logo-text">MagnetFlow</span>
+        </div>
+        <span class="logo-version">v2.0</span>
+      </div>
+      <nav class="sidebar-nav" id="sidebar-nav">
+        <a href="#dashboard" class="nav-link active" data-page="dashboard">
+          <span class="nav-icon">📥</span>
+          <span class="nav-label">下载管理</span>
+        </a>
+        <a href="#files" class="nav-link" data-page="files">
+          <span class="nav-icon">📁</span>
+          <span class="nav-label">文件管理</span>
+        </a>
+        <a href="#netdisk" class="nav-link" data-page="netdisk">
+          <span class="nav-icon">☁️</span>
+          <span class="nav-label">网盘</span>
+        </a>
+        <a href="#settings" class="nav-link" data-page="settings">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-label">设置</span>
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <span class="user-avatar">👤</span>
+          <span class="user-name" id="current-user">admin</span>
+        </div>
+        <button class="btn-logout" id="btn-logout" title="退出登录">退出</button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content" id="main-content">
+      <!-- Pages rendered here by JS -->
+    </main>
+  </div>
+
+  <!-- Modal Container -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal" id="modal">
+      <div class="modal-header" id="modal-header"></div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-footer" id="modal-footer"></div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17"></script>
+  <script src="/js/api.js?v=2.3"></script>
+  <script src="/js/app.js?v=3.0"></script>
+</body>
+</html>

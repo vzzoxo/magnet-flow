@@ -1,0 +1,59 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="MagnetFlow">
+  <defs>
+    <!-- Apple-style vivid gradient -->
+    <linearGradient id="mfBg" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0A84FF"/>
+      <stop offset="0.55" stop-color="#5E5CE6"/>
+      <stop offset="1" stop-color="#BF5AF2"/>
+    </linearGradient>
+    <linearGradient id="mfMag" x1="40" y1="28" x2="88" y2="104" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EAF2FF"/>
+    </linearGradient>
+    <!-- Soft top sheen for the glass look -->
+    <linearGradient id="mfSheen" x1="0" y1="0" x2="0" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.45"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="mfShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0A1B4D" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <!-- Squircle background -->
+  <rect x="6" y="6" width="116" height="116" rx="30" fill="url(#mfBg)"/>
+  <rect x="6" y="6" width="116" height="116" rx="30" fill="url(#mfSheen)"/>
+  <rect x="6.75" y="6.75" width="114.5" height="114.5" rx="29.25" fill="none" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="1.5"/>
+
+  <!-- Horseshoe magnet -->
+  <g filter="url(#mfShadow)">
+    <path d="M40 34
+             a24 24 0 0 1 48 0
+             v6
+             h-15
+             v-6
+             a9 9 0 0 0 -18 0
+             v6
+             h-15
+             z" fill="url(#mfMag)"/>
+    <path d="M40 88
+             v-48
+             h15
+             v48
+             a9 9 0 0 0 18 0
+             v-48
+             h15
+             v48
+             a24 24 0 0 1 -48 0
+             z" fill="url(#mfMag)"/>
+    <!-- Pole tips -->
+    <rect x="40" y="82" width="15" height="12" rx="2" fill="#0A84FF"/>
+    <rect x="73" y="82" width="15" height="12" rx="2" fill="#BF5AF2"/>
+  </g>
+
+  <!-- Flow particles being attracted -->
+  <circle cx="100" cy="96" r="4.5" fill="#FFFFFF" fill-opacity="0.95"/>
+  <circle cx="110" cy="84" r="3" fill="#FFFFFF" fill-opacity="0.7"/>
+  <circle cx="106" cy="104" r="2.2" fill="#FFFFFF" fill-opacity="0.55"/>
+</svg>
