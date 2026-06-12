@@ -82,6 +82,27 @@ systemctl restart rclone-rcd
 
 连接后，网页「网盘」页会自动出现对应的网盘，可浏览与在线播放；文件管理里也可把文件 ☁️ 上传到网盘（仅能上传**已下载完成**的文件）。
 
+## 🌐 绑定域名 + HTTPS（反向代理）
+
+把应用放在反向代理后并启用 TLS（推荐 [Caddy](https://caddyserver.com/)，自动签发并续期 Let's Encrypt 证书）。
+
+1. 将域名解析（A 记录）指向服务器公网 IP，确保 80/443 端口可达。
+2. 让应用只监听本机（不再对公网暴露 3000）：在 `.env` 中设置
+   ```
+   HOST=127.0.0.1
+   ```
+   然后 `systemctl restart magnetflow`。
+3. 安装 Caddy 并写 `/etc/caddy/Caddyfile`（把 `your.domain.com` 换成你的域名）：
+   ```caddyfile
+   your.domain.com {
+       encode zstd gzip
+       reverse_proxy 127.0.0.1:3000
+   }
+   ```
+4. `systemctl restart caddy` —— Caddy 会自动申请证书。完成后访问 `https://your.domain.com`。
+
+WebSocket（实时进度）由 Caddy 自动升级代理，无需额外配置。
+
 ## 🖥️ 服务管理
 
 ```bash

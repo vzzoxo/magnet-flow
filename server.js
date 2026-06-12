@@ -13,6 +13,7 @@ const fsPromises = require('fs/promises');
 const { verifyToken, hashPassword, assertSecretConfigured } = require('./lib/auth');
 const {
   PORT,
+  HOST,
   DOWNLOAD_DIR,
   DATA_DIR,
   USERS_FILE,
@@ -302,7 +303,7 @@ async function initialize() {
   }
 
   // Start the server
-  server.listen(PORT, () => {
+  server.listen(PORT, HOST, () => {
     console.log('');
     console.log('  ╔══════════════════════════════════════════╗');
     console.log('  ║          MagnetFlow Server               ║');
