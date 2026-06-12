@@ -149,7 +149,7 @@ bt-prioritize-piece=head=10M,tail=10M
 seed-time=0
 seed-ratio=0.0
 
-bt-tracker=udp://tracker.opentrackr.org:1337/announce,udp://open.demonii.com:1337/announce,udp://open.stealth.si:80/announce,udp://tracker.torrent.eu.org:451/announce,udp://tracker.dler.org:6969/announce,udp://tracker.bittor.pw:1337/announce,udp://tracker-udp.gbitt.info:80/announce,udp://tracker.qu.ax:6969/announce
+bt-tracker=udp://zer0day.ch:1337/announce,udp://tracker.publictracker.xyz:6969/announce,udp://tracker.opentrackr.org:1337/announce,udp://open.demonii.com:1337/announce,udp://open.stealth.si:80/announce,udp://yuptracker-eu.gaijinent.com:27022/announce,udp://wepzone.net:6969/announce,udp://tracker2.dler.org:80/announce,udp://tracker.wildkat.net:6969/announce,udp://tracker.tryhackx.org:6969/announce,udp://tracker.torrent.eu.org:451/announce,udp://tracker.t-1.org:6969/announce,udp://tracker.qu.ax:6969/announce,udp://tracker.dler.org:6969/announce,udp://tracker.corpscorp.online:80/announce,udp://tracker.bluefrog.pw:2710/announce,udp://tracker.bittor.pw:1337/announce,udp://tracker.auctor.tv:6969/announce,udp://tracker.004430.xyz:1337/announce,udp://tracker-udp.gbitt.info:80/announce
 EOF
 c_ok "aria2 配置就绪"
 
