@@ -273,6 +273,14 @@ EOF
 sysctl --system >/dev/null 2>&1 || true
 c_ok "已配置日志轮转 + BBR"
 
+# ── 8e. 防火墙：若启用了 ufw，放行应用端口与 BT 端口 ─────────────────────────
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+  ufw allow "${PORT}/tcp" >/dev/null 2>&1 || true
+  ufw allow 6881:6999/tcp >/dev/null 2>&1 || true
+  ufw allow 6881:6999/udp >/dev/null 2>&1 || true
+  c_warn "已在 ufw 放行 ${PORT} 与 BT 端口 6881-6999；若使用云厂商防火墙(如 DigitalOcean Cloud Firewall)请自行放行这些端口"
+fi
+
 # ── 9. 完成 ──────────────────────────────────────────────────────────────────
 IP="$(curl -s -m 5 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')"
 echo
