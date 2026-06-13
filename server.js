@@ -26,6 +26,7 @@ const {
 } = require('./lib/config');
 const { notify, notifyEnabled } = require('./lib/notify');
 const { startUpload } = require('./lib/uploader');
+const settings = require('./lib/settings');
 const rss = require('./lib/rss');
 
 // Fail fast if the JWT secret is missing or left at the insecure default.
@@ -62,6 +63,7 @@ app.use('/api/stream', require('./routes/stream'));
 app.use('/api/system', require('./routes/system'));
 app.use('/api/remotes', require('./routes/remotes'));
 app.use('/api/rss', require('./routes/rss'));
+app.use('/api/settings', require('./routes/settings'));
 
 // Unknown API routes return JSON 404 (not the SPA HTML fallback below).
 app.use('/api', (req, res) => {
@@ -195,7 +197,11 @@ function completedPath(dl) {
  * @param {object[]} stopped
  */
 async function handleCompletions(stopped) {
-  if (!notifyEnabled() && !AUTO_UPLOAD_REMOTE) return;
+  const au = settings.getAutoUpload();
+  const ncfg = settings.getNotify();
+  const autoUploadOn = !!(au && au.enabled && au.remote);
+  const notifyOn = notifyEnabled(ncfg);
+  if (!notifyOn && !autoUploadOn) return;
   const present = new Set();
   for (const dl of stopped) {
     if (dl.status !== 'complete') continue;
@@ -205,14 +211,14 @@ async function handleCompletions(stopped) {
     completionHandled.add(dl.gid);
 
     const name = downloadName(dl);
-    if (notifyEnabled()) {
-      notify('✅ 下载完成', name).catch(() => {});
+    if (notifyOn) {
+      notify('✅ 下载完成', name, ncfg).catch(() => {});
     }
-    if (AUTO_UPLOAD_REMOTE) {
+    if (autoUploadOn) {
       const abs = completedPath(dl);
       if (abs) {
-        startUpload(abs, AUTO_UPLOAD_REMOTE, AUTO_UPLOAD_DEST)
-          .then((j) => console.log(`[MagnetFlow] Auto-upload "${name}" → ${AUTO_UPLOAD_REMOTE} (job ${j.jobid})`))
+        startUpload(abs, au.remote, au.dest)
+          .then((j) => console.log(`[MagnetFlow] Auto-upload "${name}" → ${au.remote} (job ${j.jobid})`))
           .catch((e) => console.error(`[MagnetFlow] Auto-upload failed for "${name}":`, e.message));
       }
     }
@@ -266,7 +272,9 @@ function startPolling() {
   pollingInterval = setInterval(async () => {
     const needBroadcast = authenticatedClients.size > 0;
     // Keep polling for auto-clear / completion hooks even when nobody watches.
-    if (!needBroadcast && !AUTO_CLEAR_COMPLETED && !AUTO_UPLOAD_REMOTE && !notifyEnabled()) return;
+    const au = settings.getAutoUpload();
+    const hooksActive = !!(au && au.enabled && au.remote) || notifyEnabled(settings.getNotify());
+    if (!needBroadcast && !AUTO_CLEAR_COMPLETED && !hooksActive) return;
 
     try {
       const [active, waiting, stopped, stats] = await Promise.all([
@@ -372,6 +380,7 @@ async function initialize() {
   });
 
   // Start polling aria2
+  await settings.init();
   startPolling();
 
   // RSS subscriptions: check every 15 minutes (and once shortly after boot).

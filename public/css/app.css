@@ -429,6 +429,8 @@ img { display: block; }
   backdrop-filter: blur(22px) saturate(180%); -webkit-backdrop-filter: blur(22px) saturate(180%);
   border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); }
 .settings-card form { display: flex; flex-direction: column; gap: 16px; max-width: 440px; }
+.settings-toggle { display: flex; align-items: center; gap: 10px; font-size: 0.9rem; font-weight: 500; cursor: pointer; }
+.settings-toggle input { width: 18px; height: 18px; accent-color: var(--primary); flex-shrink: 0; }
 .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding: 13px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.5); }
 .settings-row:last-child { border-bottom: none; }

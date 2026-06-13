@@ -159,6 +159,12 @@ window.API = (function () {
       return api.request('/api/system/info');
     },
 
+    /* ── Settings ──────────────────────────────────────── */
+    getSettings() { return api.request('/api/settings'); },
+    saveSettings(patch) {
+      return api.request('/api/settings', { method: 'POST', body: JSON.stringify(patch) });
+    },
+
     /* ── RSS ───────────────────────────────────────────── */
     listRss() { return api.request('/api/rss/list'); },
     addRss(name, url, filter) {

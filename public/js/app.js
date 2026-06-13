@@ -617,7 +617,7 @@
         renderNetdisk(param || '');
         break;
       case 'rss':
-        renderRss();
+        renderSettings();
         break;
       case 'netplay':
         renderNetMediaPlayer(param || '');
@@ -627,6 +627,9 @@
         break;
       case 'settings':
         renderSettings();
+        break;
+      case 'about':
+        renderAbout();
         break;
       default:
         renderDashboard();
@@ -1418,19 +1421,6 @@
      RSS Subscriptions
      ══════════════════════════════════════════════════════ */
 
-  async function renderRss() {
-    const main = document.getElementById('main-content');
-    main.innerHTML = `
-      <div class="page-header"><h1 class="page-title">📡 RSS 订阅</h1>
-        <button class="btn-primary btn-sm" id="rss-add-btn">＋ 添加订阅</button>
-      </div>
-      <p class="text-muted text-sm" style="margin:-8px 0 18px">每 15 分钟自动检查；标题匹配「过滤词」的新条目会自动加入下载。过滤词支持关键词或正则,留空=全部。</p>
-      <div id="rss-list">${netEmpty('⏳', '加载中…')}</div>
-    `;
-    document.getElementById('rss-add-btn').onclick = rssAddModal;
-    await refreshRss();
-  }
-
   async function refreshRss() {
     const box = document.getElementById('rss-list');
     if (!box) return;
@@ -1526,7 +1516,54 @@
      Settings Page
      ══════════════════════════════════════════════════════ */
 
-  function renderSettings() {
+  function renderAbout() {
+    const main = document.getElementById('main-content');
+    main.innerHTML = `
+      <div class="page-header"><h1 class="page-title">📖 关于</h1></div>
+
+      <div class="settings-section">
+        <h2 class="settings-section-title">系统信息</h2>
+        <div class="settings-card" id="system-info">
+          <div class="settings-row"><span class="settings-label">平台</span><span class="settings-value" id="info-platform">加载中…</span></div>
+          <div class="settings-row"><span class="settings-label">运行环境</span><span class="settings-value" id="info-node">加载中…</span></div>
+          <div class="settings-row"><span class="settings-label">aria2 引擎</span><span class="settings-value" id="info-aria2">加载中…</span></div>
+          <div class="settings-row"><span class="settings-label">运行状态</span><span class="settings-value text-success" id="info-status">运行中</span></div>
+          <div class="settings-row"><span class="settings-label">运行时长</span><span class="settings-value" id="info-uptime">加载中…</span></div>
+          <div class="settings-row"><span class="settings-label">版本</span><span class="settings-value" id="info-version">加载中…</span></div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h2 class="settings-section-title">关于</h2>
+        <div class="settings-card about-card">
+          <div class="about-head">
+            <img class="about-logo" src="/img/logo.svg" alt="MagnetFlow">
+            <div class="about-titles">
+              <div class="about-name">MagnetFlow</div>
+              <div class="about-tagline">自托管磁力下载 · 在线串流 · 文件管理</div>
+            </div>
+            <span class="about-version" id="about-version">v2.0.0</span>
+          </div>
+          <p class="about-desc">一个轻量、自托管的下载中心：粘贴磁力链接或下载地址即可交给 aria2 高速下载，支持边下边管、在线播放、网盘上传，并在完成后自动清理记录、保留文件。</p>
+          <div class="about-features">
+            <span class="about-chip">🧲 磁力 / 种子</span>
+            <span class="about-chip">🎬 在线串流</span>
+            <span class="about-chip">📁 文件管理</span>
+            <span class="about-chip">☁️ 网盘上传</span>
+            <span class="about-chip">📡 RSS 订阅</span>
+            <span class="about-chip">🧹 自动清理</span>
+          </div>
+          <div class="about-footer">
+            <span>Powered by Node.js · Express · aria2 · rclone</span>
+            <span>© 2026 MagnetFlow · MIT License</span>
+          </div>
+        </div>
+      </div>
+    `;
+    loadSystemInfo();
+  }
+
+  async function renderSettings() {
     const main = document.getElementById('main-content');
     main.innerHTML = `
       <div class="page-header">
@@ -1555,66 +1592,46 @@
       </div>
 
       <div class="settings-section">
-        <h2 class="settings-section-title">系统信息</h2>
-        <div class="settings-card" id="system-info">
-          <div class="settings-row">
-            <span class="settings-label">平台</span>
-            <span class="settings-value" id="info-platform">加载中…</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">运行环境</span>
-            <span class="settings-value" id="info-node">加载中…</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">aria2 引擎</span>
-            <span class="settings-value" id="info-aria2">加载中…</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">运行状态</span>
-            <span class="settings-value text-success" id="info-status">运行中</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">运行时长</span>
-            <span class="settings-value" id="info-uptime">加载中…</span>
-          </div>
-          <div class="settings-row">
-            <span class="settings-label">版本</span>
-            <span class="settings-value" id="info-version">加载中…</span>
-          </div>
+        <h2 class="settings-section-title">下载完成后自动上传到网盘</h2>
+        <div class="settings-card">
+          <form id="autoupload-form">
+            <label class="settings-toggle"><input type="checkbox" id="au-enabled"><span>启用：下载完成后自动上传到网盘（本地保留）</span></label>
+            <div class="form-group">
+              <label class="form-label" for="au-remote">目标网盘</label>
+              <select id="au-remote" class="form-select"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="au-dest">目标文件夹（留空＝根目录）</label>
+              <input type="text" id="au-dest" class="form-input" placeholder="例如 downloads">
+            </div>
+            <button type="submit" class="btn-primary">保存</button>
+          </form>
         </div>
       </div>
 
       <div class="settings-section">
-        <h2 class="settings-section-title">关于</h2>
-        <div class="settings-card about-card">
-          <div class="about-head">
-            <img class="about-logo" src="/img/logo.svg" alt="MagnetFlow">
-            <div class="about-titles">
-              <div class="about-name">MagnetFlow</div>
-              <div class="about-tagline">自托管磁力下载 · 在线串流 · 文件管理</div>
-            </div>
-            <span class="about-version" id="about-version">v2.0.0</span>
-          </div>
-
-          <p class="about-desc">
-            一个轻量、自托管的下载中心：粘贴磁力链接或下载地址即可交给 aria2 高速下载，
-            支持边下边管、在线播放视频，并在任务完成后自动清理记录、保留文件。
-          </p>
-
-          <div class="about-features">
-            <span class="about-chip">🧲 磁力 / 种子</span>
-            <span class="about-chip">🔗 HTTP / HTTPS</span>
-            <span class="about-chip">🎬 在线串流</span>
-            <span class="about-chip">📁 文件管理</span>
-            <span class="about-chip">📊 实时进度</span>
-            <span class="about-chip">🧹 自动清理</span>
-          </div>
-
-          <div class="about-footer">
-            <span>Powered by Node.js · Express · aria2 · hls.js</span>
-            <span>© 2026 MagnetFlow · MIT License</span>
-          </div>
+        <h2 class="settings-section-title">完成通知</h2>
+        <div class="settings-card">
+          <form id="notify-form">
+            <div class="form-group"><label class="form-label">Telegram Bot Token</label>
+              <input type="text" id="nf-tg-token" class="form-input" placeholder="如 123456:ABC-DEF…"></div>
+            <div class="form-group"><label class="form-label">Telegram Chat ID</label>
+              <input type="text" id="nf-tg-chat" class="form-input" placeholder="你的 chat id"></div>
+            <div class="form-group"><label class="form-label">Bark 推送地址</label>
+              <input type="text" id="nf-bark" class="form-input" placeholder="https://api.day.app/yourkey"></div>
+            <button type="submit" class="btn-primary">保存</button>
+            <p class="form-hint" style="margin-top:8px">填好后下载完成会推送通知；全部留空＝关闭。</p>
+          </form>
         </div>
+      </div>
+
+      <div class="settings-section">
+        <h2 class="settings-section-title" style="justify-content:space-between">
+          <span>RSS 订阅</span>
+          <button class="btn-primary btn-sm" id="rss-add-btn">＋ 添加</button>
+        </h2>
+        <p class="text-muted text-xs" style="margin:-6px 0 12px">每 15 分钟自动检查；标题匹配「过滤词」（关键词或正则，留空＝全部）的新条目自动下载。</p>
+        <div id="rss-list">${netEmpty('⏳', '加载中…')}</div>
       </div>
     `;
 
@@ -1648,8 +1665,50 @@
       }
     });
 
-    // Load system info
-    loadSystemInfo();
+    // Load current settings + remotes, then wire the auto-upload & notify forms
+    let cfg = {};
+    try { cfg = await API.getSettings(); } catch (e) { /* ignore */ }
+    let remotes = [];
+    try { const r = await API.listRemotes(); remotes = (r && r.remotes) || []; } catch (e) { /* ignore */ }
+
+    const au = (cfg && cfg.autoUpload) || {};
+    const auRemote = document.getElementById('au-remote');
+    auRemote.innerHTML = '<option value="">（选择网盘）</option>' +
+      remotes.map((r) => `<option value="${escapeHtml(r)}"${r === au.remote ? ' selected' : ''}>${escapeHtml(r)}</option>`).join('');
+    document.getElementById('au-enabled').checked = !!au.enabled;
+    document.getElementById('au-dest').value = au.dest || '';
+
+    document.getElementById('autoupload-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const enabled = document.getElementById('au-enabled').checked;
+      const remote = auRemote.value;
+      const dest = document.getElementById('au-dest').value.trim();
+      if (enabled && !remote) { showToast('请选择目标网盘', 'warning'); return; }
+      try {
+        await API.saveSettings({ autoUpload: { enabled, remote, dest } });
+        showToast('自动上传设置已保存', 'success');
+      } catch (err) { showToast('保存失败: ' + err.message, 'error'); }
+    });
+
+    const nf = (cfg && cfg.notify) || {};
+    document.getElementById('nf-tg-token').value = nf.telegramToken || '';
+    document.getElementById('nf-tg-chat').value = nf.telegramChat || '';
+    document.getElementById('nf-bark').value = nf.barkUrl || '';
+    document.getElementById('notify-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await API.saveSettings({ notify: {
+          telegramToken: document.getElementById('nf-tg-token').value.trim(),
+          telegramChat: document.getElementById('nf-tg-chat').value.trim(),
+          barkUrl: document.getElementById('nf-bark').value.trim(),
+        } });
+        showToast('通知设置已保存', 'success');
+      } catch (err) { showToast('保存失败: ' + err.message, 'error'); }
+    });
+
+    // RSS subscriptions
+    document.getElementById('rss-add-btn').onclick = rssAddModal;
+    refreshRss();
   }
 
   function formatUptime(sec) {
