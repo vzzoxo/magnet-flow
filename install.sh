@@ -111,7 +111,7 @@ fi
 # ── 7. aria2 配置 ────────────────────────────────────────────────────────────
 c_info "写入 aria2 配置…"
 # 从 GitHub 拉取最新 BT tracker 列表（失败则使用内置备用列表）
-BT_TRACKERS="$(curl -fsSL -m 15 https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt 2>/dev/null | grep -E '^[a-z]+://' | paste -sd, -)"
+BT_TRACKERS="$(curl -fsSL -m 15 https://raw.githubusercontent.com/adysec/tracker/main/trackers_best.txt 2>/dev/null | grep -E '^[a-z]+://' | paste -sd, -)"
 if [ -z "${BT_TRACKERS}" ]; then
   BT_TRACKERS="udp://tracker.opentrackr.org:1337/announce,udp://open.demonii.com:1337/announce,udp://open.stealth.si:80/announce,udp://tracker.torrent.eu.org:451/announce,udp://tracker.dler.org:6969/announce,udp://tracker.bittor.pw:1337/announce,udp://tracker-udp.gbitt.info:80/announce,udp://tracker.qu.ax:6969/announce"
   c_warn "tracker 列表拉取失败，使用内置备用列表"
