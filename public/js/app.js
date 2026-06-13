@@ -766,9 +766,80 @@
     if (el('stat-total-count')) el('stat-total-count').textContent = downloads.length;
   }
 
+  // One delegated click handler for all download action buttons (so cards can
+  // be updated/created in place without re-binding).
+  function ensureDownloadDelegation(container) {
+    if (container._mfBound) return;
+    container._mfBound = true;
+    container.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn || !container.contains(btn)) return;
+      e.stopPropagation();
+      handleDownloadAction(btn.dataset.action, btn.dataset.gid);
+    });
+  }
+
+  function dlVars(dl) {
+    const totalLength = Number(dl.totalLength || 0);
+    const completedLength = Number(dl.completedLength || 0);
+    const percent = totalLength > 0 ? Math.round((completedLength / totalLength) * 100) : 0;
+    const status = dl.status || 'unknown';
+    const isActive = status === 'active';
+    const canToggle = isActive || status === 'paused' || status === 'waiting';
+    return { totalLength, completedLength, percent, status, isActive, canToggle, speed: Number(dl.downloadSpeed || 0) };
+  }
+  function dlActionsHtml(dl, v) {
+    return `${v.canToggle ? `<button class="btn-icon" data-action="${v.isActive ? 'pause' : 'resume'}" data-gid="${dl.gid}" title="${v.isActive ? '暂停' : '继续'}">${v.isActive ? '⏸️' : '▶️'}</button>` : ''}${(dl.bittorrent && v.status !== 'complete' && v.status !== 'error') ? `<button class="btn-icon" data-action="files" data-gid="${dl.gid}" title="选择文件">📂</button>` : ''}<button class="btn-icon danger" data-action="remove" data-gid="${dl.gid}" title="删除">🗑️</button>`;
+  }
+  function dlStatsHtml(dl, v) {
+    return `<span class="download-stat"><span>进度</span> <strong>${formatBytes(v.completedLength)} / ${formatBytes(v.totalLength)}</strong></span>${v.isActive ? `<span class="download-stat"><span>速度</span> <strong>${formatSpeed(v.speed)}</strong></span>` : ''}${v.isActive ? `<span class="download-stat"><span>连接</span> <strong>${Number(dl.connections) || 0}</strong></span>` : ''}${(v.isActive && dl.bittorrent) ? `<span class="download-stat"><span>做种</span> <strong class="${(Number(dl.numSeeders) || 0) > 0 ? 'text-success' : 'text-danger'}">${dl.numSeeders != null ? dl.numSeeders : '?'}</strong></span>` : ''}`;
+  }
+  function dlMetaRightHtml(dl, v) {
+    return `<span class="download-percentage">${v.percent}%</span>${getStatusBadge(v.status)}`;
+  }
+
+  function renderDownloadCard(dl) {
+    const v = dlVars(dl);
+    return `
+      <div class="download-card" data-gid="${dl.gid}">
+        <div class="download-header">
+          <div class="download-name">${escapeHtml(extractFileName(dl))}</div>
+          <div class="download-actions">${dlActionsHtml(dl, v)}</div>
+        </div>
+        <div class="download-progress">
+          <div class="progress-bar"><div class="progress-fill ${v.isActive ? 'active' : ''}" style="width:${v.percent}%"></div></div>
+        </div>
+        <div class="download-meta">
+          <div class="download-stats">${dlStatsHtml(dl, v)}</div>
+          <div class="download-meta-right flex items-center gap-8">${dlMetaRightHtml(dl, v)}</div>
+        </div>
+      </div>`;
+  }
+
+  // In-place update of an existing card — only changed values are written, so
+  // the list does NOT flicker; only the progress bar animates.
+  function updateDownloadCard(card, dl) {
+    const v = dlVars(dl);
+    const fill = card.querySelector('.progress-fill');
+    if (fill) { fill.style.width = v.percent + '%'; fill.classList.toggle('active', v.isActive); }
+    const nameEl = card.querySelector('.download-name');
+    const name = escapeHtml(extractFileName(dl));
+    if (nameEl && nameEl.innerHTML !== name) nameEl.innerHTML = name;
+    const statsEl = card.querySelector('.download-stats');
+    if (statsEl) { const h = dlStatsHtml(dl, v); if (statsEl.innerHTML !== h) statsEl.innerHTML = h; }
+    const metaR = card.querySelector('.download-meta-right');
+    if (metaR) { const h = dlMetaRightHtml(dl, v); if (metaR.innerHTML !== h) metaR.innerHTML = h; }
+    const actEl = card.querySelector('.download-actions');
+    if (actEl) {
+      const stateKey = (v.canToggle ? (v.isActive ? 'p' : 'r') : 'n') + (dl.bittorrent && v.status !== 'complete' && v.status !== 'error' ? 'f' : '');
+      if (actEl.dataset.state !== stateKey) { actEl.innerHTML = dlActionsHtml(dl, v); actEl.dataset.state = stateKey; }
+    }
+  }
+
   function renderDownloadList() {
     const container = document.getElementById('download-list');
     if (!container) return;
+    ensureDownloadDelegation(container);
 
     if (!downloads.length) {
       container.innerHTML = `
@@ -776,77 +847,34 @@
           <div class="empty-state-icon">📦</div>
           <div class="empty-state-title">暂无下载任务</div>
           <div class="empty-state-desc">点击上方「添加下载」按钮，粘贴磁力链接或下载链接开始下载</div>
-        </div>
-      `;
+        </div>`;
       return;
     }
+    const emptyEl = container.querySelector('.empty-state');
+    if (emptyEl) emptyEl.remove();
 
-    // Sort: active → waiting → paused → complete → error
     const order = { active: 0, waiting: 1, paused: 2, complete: 3, error: 4, removed: 5 };
     const sorted = [...downloads].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
 
-    container.innerHTML = sorted.map(dl => renderDownloadCard(dl)).join('');
-
-    // Bind action buttons
-    container.querySelectorAll('[data-action]').forEach(btn => {
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        const action = btn.dataset.action;
-        const gid = btn.dataset.gid;
-        handleDownloadAction(action, gid);
-      };
+    const seen = new Set();
+    let anchor = null; // last positioned card
+    sorted.forEach((dl) => {
+      seen.add(dl.gid);
+      let card = container.querySelector(`.download-card[data-gid="${CSS.escape(dl.gid)}"]`);
+      if (!card) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = renderDownloadCard(dl).trim();
+        card = tmp.firstElementChild;
+      } else {
+        updateDownloadCard(card, dl);
+      }
+      const ref = anchor ? anchor.nextElementSibling : container.firstElementChild;
+      if (ref !== card) container.insertBefore(card, ref);
+      anchor = card;
     });
-  }
-
-  function renderDownloadCard(dl) {
-    const name = extractFileName(dl);
-    const totalLength = Number(dl.totalLength || 0);
-    const completedLength = Number(dl.completedLength || 0);
-    const percent = totalLength > 0 ? Math.round((completedLength / totalLength) * 100) : 0;
-    const speed = Number(dl.downloadSpeed || 0);
-    const status = dl.status || 'unknown';
-
-    const statusBadge = getStatusBadge(status);
-    const isActive = status === 'active';
-    const isPaused = status === 'paused' || status === 'waiting';
-    const canToggle = isActive || isPaused;
-
-    return `
-      <div class="download-card" data-gid="${dl.gid}">
-        <div class="download-header">
-          <div class="download-name">${escapeHtml(name)}</div>
-          <div class="download-actions">
-            ${canToggle ? `
-              <button class="btn-icon" data-action="${isActive ? 'pause' : 'resume'}" data-gid="${dl.gid}"
-                      title="${isActive ? '暂停' : '继续'}">
-                ${isActive ? '⏸️' : '▶️'}
-              </button>
-            ` : ''}
-            ${(dl.bittorrent && status !== 'complete' && status !== 'error') ? `<button class="btn-icon" data-action="files" data-gid="${dl.gid}" title="选择文件">📂</button>` : ''}
-            <button class="btn-icon danger" data-action="remove" data-gid="${dl.gid}" title="删除">🗑️</button>
-          </div>
-        </div>
-        <div class="download-progress">
-          <div class="progress-bar">
-            <div class="progress-fill ${isActive ? 'active' : ''}" style="width:${percent}%"></div>
-          </div>
-        </div>
-        <div class="download-meta">
-          <div class="download-stats">
-            <span class="download-stat">
-              <span>进度</span> <strong>${formatBytes(completedLength)} / ${formatBytes(totalLength)}</strong>
-            </span>
-            ${isActive ? `<span class="download-stat"><span>速度</span> <strong>${formatSpeed(speed)}</strong></span>` : ''}
-            ${isActive ? `<span class="download-stat"><span>连接</span> <strong>${Number(dl.connections) || 0}</strong></span>` : ''}
-            ${(isActive && dl.bittorrent) ? `<span class="download-stat"><span>做种</span> <strong class="${(Number(dl.numSeeders) || 0) > 0 ? 'text-success' : 'text-danger'}">${dl.numSeeders != null ? dl.numSeeders : '?'}</strong></span>` : ''}
-          </div>
-          <div class="flex items-center gap-8">
-            <span class="download-percentage">${percent}%</span>
-            ${statusBadge}
-          </div>
-        </div>
-      </div>
-    `;
+    container.querySelectorAll('.download-card').forEach((card) => {
+      if (!seen.has(card.dataset.gid)) card.remove();
+    });
   }
 
   function getStatusBadge(status) {
