@@ -390,7 +390,10 @@ img { display: block; }
 .file-row { cursor: pointer; transition: background var(--transition-fast); }
 .file-row:hover { background: var(--bg-hover); }
 .file-icon { font-size: 1.2rem; }
-.file-name, .file-name-cell { font-weight: 500; color: var(--text-primary); word-break: break-all; }
+.file-name, .file-name-cell { font-weight: 500; color: var(--text-primary); }
+/* Truncate long names to one line with an ellipsis (max-width:0 lets this
+   flexible column absorb the leftover width while clipping overflow). */
+.file-name-cell { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-size, .col-size, .file-date, .col-date { color: var(--text-muted); white-space: nowrap; }
 .file-actions-cell { white-space: nowrap; }
 .file-checkbox, .file-cb, .file-table input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--primary); cursor: pointer; }

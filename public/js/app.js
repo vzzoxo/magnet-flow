@@ -986,7 +986,7 @@
               <tr class="file-row" data-path="${pathStr}" data-name="${nameStr}" data-isdir="${f.isDir}">
                 <td onclick="event.stopPropagation()"><input type="checkbox" class="file-cb" value="${pathStr}"></td>
                 <td class="text-center">${icon}</td>
-                <td>${nameStr}</td>
+                <td class="file-name-cell" title="${nameStr}">${nameStr}</td>
                 <td class="text-muted">${sizeStr}</td>
                 <td class="text-muted">${dateStr}</td>
                 <td onclick="event.stopPropagation()">
@@ -1223,7 +1223,7 @@
       return `
         <tr class="file-row" data-path="${escapeHtml(f.path)}" data-isdir="${f.isDir}" data-playable="${playable}">
           <td class="text-center">${icon}</td>
-          <td>${escapeHtml(f.name)}</td>
+          <td class="file-name-cell" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</td>
           <td class="text-muted">${sizeStr}</td>
           <td class="text-muted">${f.modified ? formatDate(f.modified) : '--'}</td>
         </tr>`;
