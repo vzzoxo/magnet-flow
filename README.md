@@ -96,7 +96,15 @@ systemctl restart rclone-rcd
    ```caddyfile
    your.domain.com {
        encode zstd gzip
-       reverse_proxy 127.0.0.1:3000
+       reverse_proxy 127.0.0.1:3000 {
+           header_down -Cache-Control
+       }
+       # 版本化静态资源长缓存
+       @assets path /css/* /js/* /img/* /favicon.ico
+       header @assets Cache-Control "public, max-age=31536000, immutable"
+       # HTML/API 不缓存，避免内嵌浏览器卡在旧版 index.html
+       @dynamic not path /css/* /js/* /img/* /favicon.ico
+       header @dynamic Cache-Control "no-store"
    }
    ```
 4. `systemctl restart caddy` —— Caddy 会自动申请证书。完成后访问 `https://your.domain.com`。
