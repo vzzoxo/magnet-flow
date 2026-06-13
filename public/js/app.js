@@ -331,6 +331,24 @@
   // Expose hideModal globally for onclick attributes
   window._hideModal = hideModal;
 
+  // Mobile "⋯" menu listing the per-file actions (delegates to `run`).
+  function fileActionsMenu(p, name, isArchive, run) {
+    const items = [
+      { a: 'upload', t: '☁️ 上传到网盘' },
+      ...(isArchive ? [{ a: 'extract', t: '📦 解压' }] : []),
+      { a: 'copy', t: '📋 复制' },
+      { a: 'move', t: '✂️ 移动 / 重命名' },
+      { a: 'delete', t: '🗑️ 删除', danger: true },
+    ];
+    const body = `<div class="action-menu">${items
+      .map((i) => `<button class="action-menu-item${i.danger ? ' danger' : ''}" data-act="${i.a}">${i.t}</button>`)
+      .join('')}</div>`;
+    showModal(name, body, '');
+    document.querySelectorAll('.action-menu-item').forEach((b) => {
+      b.onclick = () => { hideModal(); run(b.dataset.act, p, name); };
+    });
+  }
+
 
   /* ══════════════════════════════════════════════════════
      Cloud Upload (rclone)
@@ -877,6 +895,7 @@
       <div class="file-toolbar" id="file-toolbar">
         <button class="btn-primary btn-sm" id="btn-new-folder">📂 新建文件夹</button>
         <button class="btn-secondary btn-sm" id="btn-delete-selected" disabled>🗑️ 删除选中</button>
+        <input type="search" id="file-search" class="form-input file-search" placeholder="🔍 搜索当前目录…">
       </div>
 
       <div id="file-content">
@@ -990,13 +1009,14 @@
                 <td class="text-muted">${sizeStr}</td>
                 <td class="text-muted col-date">${dateStr}</td>
                 <td onclick="event.stopPropagation()">
-                  <div class="flex gap-4">
+                  <div class="flex gap-4 file-actions-inline">
                     <button class="btn-icon" title="上传到网盘" data-action="upload" data-path="${pathStr}" data-name="${nameStr}">${ACTION_ICONS.upload}</button>
                     ${!f.isDir && isArchiveFile(f.name) ? `<button class="btn-icon" title="解压" data-action="extract" data-path="${pathStr}">${ACTION_ICONS.extract}</button>` : ''}
                     <button class="btn-icon" title="复制" data-action="copy" data-path="${pathStr}" data-name="${nameStr}">${ACTION_ICONS.copy}</button>
                     <button class="btn-icon" title="移动 / 重命名" data-action="move" data-path="${pathStr}" data-name="${nameStr}">${ACTION_ICONS.move}</button>
                     <button class="btn-icon danger" title="删除" data-action="delete" data-path="${pathStr}" data-name="${nameStr}">${ACTION_ICONS.delete}</button>
                   </div>
+                  <button class="btn-icon file-more" title="操作" data-action="more" data-path="${pathStr}" data-name="${nameStr}" data-archive="${!f.isDir && isArchiveFile(f.name)}">⋯</button>
                 </td>
               </tr>
             `;
@@ -1013,7 +1033,7 @@
         const isDir = row.dataset.isdir === 'true';
         if (isDir) {
           window.location.hash = '#files/' + encodeURIComponent(p);
-        } else if (isVideoFile(p)) {
+        } else if (isVideoFile(p) || isAudioFile(p)) {
           window.location.hash = '#player/' + encodeURIComponent(p);
         } else {
           // Trigger download/open for other files. Open the tab synchronously
@@ -1060,34 +1080,54 @@
       });
     };
 
-    // Action buttons
+    // File actions: inline buttons (desktop) + a "⋯" menu (mobile).
+    const refreshFM = () => renderFileManager(currentPath);
+    async function handleFileAction(action, p, name) {
+      if (action === 'delete') {
+        confirmDeleteModal(p, name, refreshFM);
+      } else if (action === 'copy') {
+        copyFileModal(p, name, refreshFM);
+      } else if (action === 'move') {
+        moveFileModal(p, name, refreshFM);
+      } else if (action === 'upload') {
+        uploadToRemoteModal(p, name);
+      } else if (action === 'extract') {
+        try {
+          showToast('开始解压...', 'info');
+          const res = await API.extractArchive(p);
+          showToast('解压成功: ' + res.outputDir, 'success');
+          refreshFM();
+        } catch (err) {
+          showToast('解压失败: ' + err.message, 'error');
+        }
+      }
+    }
+
     document.querySelectorAll('[data-action]').forEach(btn => {
-      btn.onclick = async (e) => {
+      btn.onclick = (e) => {
         e.stopPropagation();
         const action = btn.dataset.action;
         const p = btn.dataset.path;
         const name = btn.dataset.name;
-
-        if (action === 'delete') {
-          confirmDeleteModal(p, name, () => renderFileManager(currentPath));
-        } else if (action === 'copy') {
-          copyFileModal(p, name, () => renderFileManager(currentPath));
-        } else if (action === 'move') {
-          moveFileModal(p, name, () => renderFileManager(currentPath));
-        } else if (action === 'upload') {
-          uploadToRemoteModal(p, name);
-        } else if (action === 'extract') {
-          try {
-            showToast('开始解压...', 'info');
-            const res = await API.extractArchive(p);
-            showToast('解压成功: ' + res.outputDir, 'success');
-            renderFileManager(currentPath);
-          } catch (err) {
-            showToast('解压失败: ' + err.message, 'error');
-          }
+        if (action === 'more') {
+          fileActionsMenu(p, name, btn.dataset.archive === 'true', handleFileAction);
+        } else {
+          handleFileAction(action, p, name);
         }
       };
     });
+
+    // Live search filter for the current directory.
+    const searchEl = document.getElementById('file-search');
+    if (searchEl) {
+      searchEl.oninput = () => {
+        const q = searchEl.value.trim().toLowerCase();
+        document.querySelectorAll('#file-content .file-row').forEach(r => {
+          const n = (r.dataset.name || '').toLowerCase();
+          r.style.display = (!q || n.includes(q)) ? '' : 'none';
+        });
+      };
+    }
   }
 
 
@@ -1099,20 +1139,29 @@
     const main = document.getElementById('main-content');
     const name = filePath.split('/').pop();
     const parentDir = filePath.split('/').slice(0, -1).join('/');
-    
+    const isAudio = isAudioFile(name);
+
+    const playerHtml = isAudio
+      ? `<div class="audio-player">
+           <div class="audio-art">🎵</div>
+           <div class="audio-name">${escapeHtml(name)}</div>
+           <audio id="video-player" controls autoplay preload="auto" style="width:100%"></audio>
+         </div>`
+      : `<div class="player-container">
+           <video id="video-player" controls preload="auto" width="100%" crossorigin="anonymous"
+                  playsinline webkit-playsinline x5-playsinline x5-video-player-type="h5-page">
+             您的浏览器不支持 Video 标签。
+           </video>
+         </div>`;
+
     main.innerHTML = `
       <div class="page-header flex gap-16 items-center">
         <button class="btn-icon" id="btn-player-back" title="返回">⬅️</button>
-        <h1 class="page-title" style="margin:0">${escapeHtml(name)}</h1>
+        <h1 class="page-title" style="margin:0;font-size:1.1rem">${escapeHtml(name)}</h1>
       </div>
 
-      <div class="player-container">
-        <video id="video-player" controls preload="auto" width="100%" crossorigin="anonymous"
-               playsinline webkit-playsinline x5-playsinline x5-video-player-type="h5-page">
-          您的浏览器不支持 Video 标签。
-        </video>
-      </div>
-      
+      ${playerHtml}
+
       <div class="settings-card" style="margin-top:24px">
         <div class="settings-row">
           <span class="settings-label">文件路径</span>
@@ -1128,7 +1177,7 @@
     const video = document.getElementById('video-player');
     const streamUrl = await API.getStreamUrl(filePath);
 
-    if (filePath.endsWith('.m3u8')) {
+    if (!isAudio && filePath.endsWith('.m3u8')) {
       if (Hls.isSupported()) {
         hlsInstance = new Hls();
         hlsInstance.loadSource(streamUrl);

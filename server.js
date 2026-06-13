@@ -20,8 +20,12 @@ const {
   PUBLIC_DIR,
   AUTO_CLEAR_COMPLETED,
   AUTO_CLEAR_DELAY_SEC,
+  AUTO_UPLOAD_REMOTE,
+  AUTO_UPLOAD_DEST,
   aria2,
 } = require('./lib/config');
+const { notify, notifyEnabled } = require('./lib/notify');
+const { startUpload } = require('./lib/uploader');
 
 // Fail fast if the JWT secret is missing or left at the insecure default.
 assertSecretConfigured();
@@ -167,6 +171,55 @@ let pollingInterval = null;
 // visible for a short grace period before auto-clearing its record.
 const completedFirstSeen = new Map();
 
+// Fire-once handling (notify / auto-upload) for newly completed downloads.
+const completionHandled = new Set();
+
+function downloadName(dl) {
+  if (dl.bittorrent && dl.bittorrent.info && dl.bittorrent.info.name) return dl.bittorrent.info.name;
+  if (dl.files && dl.files[0] && dl.files[0].path) return path.basename(dl.files[0].path);
+  return dl.gid;
+}
+
+function completedPath(dl) {
+  const name = dl.bittorrent && dl.bittorrent.info && dl.bittorrent.info.name;
+  if (name && dl.dir) return path.join(dl.dir, name);
+  if (dl.files && dl.files[0] && dl.files[0].path) return dl.files[0].path;
+  return null;
+}
+
+/**
+ * Notify and/or auto-upload when a download newly completes. Skips BitTorrent
+ * metadata entries (they spawn the real download via followedBy).
+ * @param {object[]} stopped
+ */
+async function handleCompletions(stopped) {
+  if (!notifyEnabled() && !AUTO_UPLOAD_REMOTE) return;
+  const present = new Set();
+  for (const dl of stopped) {
+    if (dl.status !== 'complete') continue;
+    if (Array.isArray(dl.followedBy) && dl.followedBy.length) continue; // metadata
+    present.add(dl.gid);
+    if (completionHandled.has(dl.gid)) continue;
+    completionHandled.add(dl.gid);
+
+    const name = downloadName(dl);
+    if (notifyEnabled()) {
+      notify('✅ 下载完成', name).catch(() => {});
+    }
+    if (AUTO_UPLOAD_REMOTE) {
+      const abs = completedPath(dl);
+      if (abs) {
+        startUpload(abs, AUTO_UPLOAD_REMOTE, AUTO_UPLOAD_DEST)
+          .then((j) => console.log(`[MagnetFlow] Auto-upload "${name}" → ${AUTO_UPLOAD_REMOTE} (job ${j.jobid})`))
+          .catch((e) => console.error(`[MagnetFlow] Auto-upload failed for "${name}":`, e.message));
+      }
+    }
+  }
+  for (const gid of completionHandled) {
+    if (!present.has(gid)) completionHandled.delete(gid);
+  }
+}
+
 /**
  * Auto-clear completed download *records* (files on disk are kept).
  * Uses aria2.removeDownloadResult, which never deletes downloaded files.
@@ -210,8 +263,8 @@ async function autoClearCompleted(stopped) {
 function startPolling() {
   pollingInterval = setInterval(async () => {
     const needBroadcast = authenticatedClients.size > 0;
-    // Keep polling for auto-clear even when nobody is watching.
-    if (!needBroadcast && !AUTO_CLEAR_COMPLETED) return;
+    // Keep polling for auto-clear / completion hooks even when nobody watches.
+    if (!needBroadcast && !AUTO_CLEAR_COMPLETED && !AUTO_UPLOAD_REMOTE && !notifyEnabled()) return;
 
     try {
       const [active, waiting, stopped, stats] = await Promise.all([
@@ -221,6 +274,7 @@ function startPolling() {
         aria2.getGlobalStat(),
       ]);
 
+      await handleCompletions(stopped);
       await autoClearCompleted(stopped);
 
       if (needBroadcast) {

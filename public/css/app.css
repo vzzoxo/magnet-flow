@@ -398,6 +398,15 @@ img { display: block; }
 .file-size, .col-size, .file-date, .col-date { color: var(--text-muted); white-space: nowrap; }
 .file-actions-cell { white-space: nowrap; }
 .file-checkbox, .file-cb, .file-table input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--primary); cursor: pointer; }
+/* Per-file actions: inline buttons on desktop, a "⋯" menu button on mobile */
+.file-more { display: none; font-size: 1.2rem; font-weight: 700; }
+.file-search { max-width: 240px; flex: 1; min-width: 140px; }
+.action-menu { display: flex; flex-direction: column; gap: 6px; }
+.action-menu-item { text-align: left; padding: 13px 16px; font-size: 0.95rem; font-weight: 500;
+  color: var(--text-primary); background: rgba(255,255,255,0.5); border: 1px solid var(--border);
+  border-radius: var(--radius-md); transition: var(--transition-fast); }
+.action-menu-item:hover { background: var(--bg-hover); }
+.action-menu-item.danger { color: var(--danger); }
 
 /* ── Player ─────────────────────────────────────────────────────────────── */
 .player-container { overflow: hidden; border-radius: var(--radius-lg); background: #000;
@@ -522,11 +531,14 @@ img { display: block; }
   .stat-value { font-size: 1.45rem; }
 
   /* Wide tables scroll horizontally instead of breaking the layout */
-  .table-wrap .file-table { min-width: 560px; }
+  .table-wrap .file-table { min-width: 380px; }
   .file-table thead th, .file-table tbody td { padding: 11px 12px; }
   /* Give the name room and hide the low-value date column on phones */
   .file-name-cell { max-width: none; min-width: 150px; }
   .col-date { display: none; }
+  /* Collapse the row's action buttons into a single "⋯" menu */
+  .file-actions-inline { display: none; }
+  .file-more { display: inline-flex; }
 
   /* Bigger touch targets */
   .btn-icon { width: 40px; height: 40px; }
