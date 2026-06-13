@@ -36,7 +36,7 @@ echo
 c_info "安装系统依赖…"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq curl ca-certificates git aria2 ffmpeg unzip p7zip-full >/dev/null
+apt-get install -y -qq curl ca-certificates git aria2 ffmpeg unzip p7zip-full cron python3 >/dev/null
 # unrar 在部分源里需要 non-free，失败不阻断
 apt-get install -y -qq unrar >/dev/null 2>&1 || apt-get install -y -qq unrar-free >/dev/null 2>&1 || c_warn "unrar 未安装（.rar 解压将不可用）"
 c_ok "系统依赖就绪"
@@ -223,6 +223,16 @@ systemctl restart aria2
 systemctl restart magnetflow
 sleep 2
 c_ok "服务已启动"
+
+# ── 8b. 每日自动刷新 BT tracker (cron 03:00) ─────────────────────────────────
+cat > /etc/cron.d/magnetflow-trackers <<EOF
+# MagnetFlow: refresh BT trackers daily at 03:00
+0 3 * * * root /usr/bin/python3 ${INSTALL_DIR}/scripts/update-trackers.py >/dev/null 2>&1
+EOF
+chmod 644 /etc/cron.d/magnetflow-trackers
+systemctl enable cron >/dev/null 2>&1 || true
+systemctl restart cron >/dev/null 2>&1 || true
+c_ok "已配置每日自动更新 tracker (03:00)"
 
 # ── 9. 完成 ──────────────────────────────────────────────────────────────────
 IP="$(curl -s -m 5 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')"
