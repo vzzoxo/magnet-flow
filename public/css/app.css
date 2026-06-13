@@ -177,7 +177,10 @@ img { display: block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── App layout ─────────────────────────────────────────────────────────── */
-.app-layout { display: flex; min-height: 100vh; }
+/* Block layout: the sidebar is position:fixed (out of flow) and the
+   mobile-header is a sticky top bar, so the app must NOT be a flex row
+   (that would place the mobile-header beside main-content and squeeze it). */
+.app-layout { display: block; min-height: 100vh; }
 
 .sidebar {
   position: fixed; top: 0; left: 0; bottom: 0;
