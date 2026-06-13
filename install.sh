@@ -145,7 +145,6 @@ follow-torrent=true
 bt-max-peers=200
 bt-max-open-files=256
 bt-request-peer-speed-limit=50M
-bt-prioritize-piece=head=10M,tail=10M
 seed-time=0
 seed-ratio=0.0
 
