@@ -1721,6 +1721,20 @@
       </div>
 
       <div class="settings-section">
+        <h2 class="settings-section-title">传输</h2>
+        <div class="settings-card">
+          <form id="aria2-form">
+            <div class="form-group">
+              <label class="form-label" for="ul-limit">全局上传速度限制</label>
+              <input type="text" id="ul-limit" class="form-input" placeholder="留空或 0 = 不限；例如 1M、500K">
+              <p class="form-hint">限制对外上传带宽。⚠️ 不要设为 0——BitTorrent 完全不上传会被对方限速，反而拖慢下载；建议留点余量（如 1M）。</p>
+            </div>
+            <button type="submit" class="btn-primary">保存</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="settings-section">
         <h2 class="settings-section-title">下载完成后自动上传到网盘</h2>
         <div class="settings-card">
           <form id="autoupload-form">
@@ -1838,6 +1852,15 @@
     // RSS subscriptions
     document.getElementById('rss-add-btn').onclick = rssAddModal;
     refreshRss();
+
+    // Upload speed limit
+    document.getElementById('ul-limit').value = (cfg.aria2 && cfg.aria2.maxUploadLimit) || '';
+    document.getElementById('aria2-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const v = document.getElementById('ul-limit').value.trim();
+      try { await API.saveSettings({ aria2: { maxUploadLimit: v } }); showToast('上传限速已保存', 'success'); }
+      catch (err) { showToast('保存失败: ' + err.message, 'error'); }
+    });
   }
 
   function formatUptime(sec) {

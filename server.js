@@ -394,6 +394,9 @@ async function initialize() {
   try {
     const version = await aria2.getVersion();
     console.log(`[MagnetFlow] Connected to aria2 v${version.version}`);
+    // Re-apply the configured upload speed cap (settings survive restarts).
+    const up = (settings.getAria2() && settings.getAria2().maxUploadLimit) || '0';
+    try { await aria2.changeGlobalOption({ 'max-overall-upload-limit': String(up || '0') }); } catch { /* ignore */ }
   } catch {
     console.warn('[MagnetFlow] ⚠ aria2 is not reachable. Downloads will fail until aria2 is started.');
   }
