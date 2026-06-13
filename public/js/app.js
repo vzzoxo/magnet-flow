@@ -970,7 +970,7 @@
             <th width="40"></th>
             <th>名称</th>
             <th width="100">大小</th>
-            <th width="150">修改时间</th>
+            <th width="150" class="col-date">修改时间</th>
             <th width="150">操作</th>
           </tr>
         </thead>
@@ -986,9 +986,9 @@
               <tr class="file-row" data-path="${pathStr}" data-name="${nameStr}" data-isdir="${f.isDir}">
                 <td onclick="event.stopPropagation()"><input type="checkbox" class="file-cb" value="${pathStr}"></td>
                 <td class="text-center">${icon}</td>
-                <td class="file-name-cell" title="${nameStr}">${nameStr}</td>
+                <td class="file-name-cell" title="${nameStr}"><span class="fname">${nameStr}</span></td>
                 <td class="text-muted">${sizeStr}</td>
-                <td class="text-muted">${dateStr}</td>
+                <td class="text-muted col-date">${dateStr}</td>
                 <td onclick="event.stopPropagation()">
                   <div class="flex gap-4">
                     <button class="btn-icon" title="上传到网盘" data-action="upload" data-path="${pathStr}" data-name="${nameStr}">${ACTION_ICONS.upload}</button>
@@ -1223,9 +1223,9 @@
       return `
         <tr class="file-row" data-path="${escapeHtml(f.path)}" data-isdir="${f.isDir}" data-playable="${playable}">
           <td class="text-center">${icon}</td>
-          <td class="file-name-cell" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</td>
+          <td class="file-name-cell" title="${escapeHtml(f.name)}"><span class="fname">${escapeHtml(f.name)}</span></td>
           <td class="text-muted">${sizeStr}</td>
-          <td class="text-muted">${f.modified ? formatDate(f.modified) : '--'}</td>
+          <td class="text-muted col-date">${f.modified ? formatDate(f.modified) : '--'}</td>
         </tr>`;
     }).join('');
 
@@ -1237,7 +1237,7 @@
       ${data.items.length ? `
       <div class="table-wrap">
       <table class="file-table">
-        <thead><tr><th width="40"></th><th>名称</th><th width="110">大小</th><th width="160">修改时间</th></tr></thead>
+        <thead><tr><th width="40"></th><th>名称</th><th width="110">大小</th><th width="160" class="col-date">修改时间</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
       </div>` : netEmpty('📂', '空文件夹')}
