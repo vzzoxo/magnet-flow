@@ -163,4 +163,40 @@ router.post('/purge', async (req, res) => {
   }
 });
 
+/**
+ * GET /files/:gid
+ * List files inside a (torrent) download for file selection.
+ */
+router.get('/files/:gid', async (req, res) => {
+  try {
+    const status = await aria2.tellStatus(req.params.gid, ['gid', 'files', 'bittorrent', 'totalLength', 'status']);
+    res.json(status);
+  } catch (err) {
+    console.error('[MagnetFlow] Files error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /select/:gid
+ * Choose which files of a torrent to download. Body: { indexes: [1,2,...] }
+ * (1-based aria2 file indices). Empty selection is rejected.
+ */
+router.post('/select/:gid', async (req, res) => {
+  try {
+    const { indexes } = req.body;
+    if (!Array.isArray(indexes) || indexes.length === 0) {
+      return res.status(400).json({ error: '请至少选择一个文件' });
+    }
+    const sel = indexes.map((n) => parseInt(n, 10)).filter((n) => n > 0).join(',');
+    if (!sel) return res.status(400).json({ error: 'Invalid indexes' });
+    await aria2.changeOption(req.params.gid, { 'select-file': sel });
+    console.log(`[MagnetFlow] select-file gid=${req.params.gid} -> ${sel}`);
+    res.json({ gid: req.params.gid, selected: sel });
+  } catch (err) {
+    console.error('[MagnetFlow] Select error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

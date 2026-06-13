@@ -101,6 +101,17 @@ window.API = (function () {
       return api.request('/api/downloads/purge', { method: 'POST' });
     },
 
+    getDownloadFiles(gid) {
+      return api.request('/api/downloads/files/' + gid);
+    },
+
+    selectDownloadFiles(gid, indexes) {
+      return api.request('/api/downloads/select/' + gid, {
+        method: 'POST',
+        body: JSON.stringify({ indexes }),
+      });
+    },
+
     /* ── Files ─────────────────────────────────────────── */
     listFiles(path) {
       return api.request(
@@ -147,6 +158,15 @@ window.API = (function () {
     getSystemInfo() {
       return api.request('/api/system/info');
     },
+
+    /* ── RSS ───────────────────────────────────────────── */
+    listRss() { return api.request('/api/rss/list'); },
+    addRss(name, url, filter) {
+      return api.request('/api/rss/add', { method: 'POST', body: JSON.stringify({ name, url, filter }) });
+    },
+    deleteRss(id) { return api.request('/api/rss/' + id, { method: 'DELETE' }); },
+    toggleRss(id) { return api.request('/api/rss/toggle/' + id, { method: 'POST' }); },
+    checkRss(id) { return api.request('/api/rss/check/' + id, { method: 'POST' }); },
 
     /* ── Cloud remotes (rclone) ────────────────────────── */
     listRemotes() {

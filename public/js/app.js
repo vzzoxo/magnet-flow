@@ -616,6 +616,9 @@
       case 'netdisk':
         renderNetdisk(param || '');
         break;
+      case 'rss':
+        renderRss();
+        break;
       case 'netplay':
         renderNetMediaPlayer(param || '');
         break;
@@ -816,6 +819,7 @@
                 ${isActive ? '⏸️' : '▶️'}
               </button>
             ` : ''}
+            ${(dl.bittorrent && status !== 'complete' && status !== 'error') ? `<button class="btn-icon" data-action="files" data-gid="${dl.gid}" title="选择文件">📂</button>` : ''}
             <button class="btn-icon danger" data-action="remove" data-gid="${dl.gid}" title="删除">🗑️</button>
           </div>
         </div>
@@ -855,6 +859,7 @@
   }
 
   async function handleDownloadAction(action, gid) {
+    if (action === 'files') { selectFilesModal(gid); return; }
     try {
       switch (action) {
         case 'pause':
@@ -874,6 +879,58 @@
     } catch (err) {
       showToast('操作失败: ' + err.message, 'error');
     }
+  }
+
+
+  async function selectFilesModal(gid) {
+    let st;
+    try {
+      st = await API.getDownloadFiles(gid);
+    } catch (e) {
+      showToast('获取文件列表失败: ' + e.message, 'error');
+      return;
+    }
+    const files = (st && st.files) || [];
+    if (!files.length) {
+      showToast('该任务尚无文件信息（可能还在获取元数据）', 'warning');
+      return;
+    }
+    const rows = files.map((f) => {
+      const idx = f.index;
+      const nm = (f.path || '').split('/').pop() || ('文件 ' + idx);
+      const sz = formatBytes(Number(f.length || 0));
+      const checked = f.selected === 'true' ? 'checked' : '';
+      return `<label class="file-pick">
+        <input type="checkbox" class="fp-cb" value="${idx}" ${checked}>
+        <span class="fp-name">${escapeHtml(nm)}</span>
+        <span class="fp-size">${sz}</span>
+      </label>`;
+    }).join('');
+    const body = `
+      <div class="flex gap-8" style="margin-bottom:10px">
+        <button class="btn-secondary btn-sm" id="fp-all">全选</button>
+        <button class="btn-secondary btn-sm" id="fp-none">全不选</button>
+      </div>
+      <div class="file-pick-list">${rows}</div>`;
+    const footer = `
+      <button class="btn-secondary" onclick="window._hideModal()">取消</button>
+      <button class="btn-primary" id="fp-apply">应用</button>`;
+    showModal('选择下载文件', body, footer);
+
+    document.getElementById('fp-all').onclick = () => document.querySelectorAll('.fp-cb').forEach((c) => { c.checked = true; });
+    document.getElementById('fp-none').onclick = () => document.querySelectorAll('.fp-cb').forEach((c) => { c.checked = false; });
+    document.getElementById('fp-apply').onclick = async () => {
+      const idx = Array.from(document.querySelectorAll('.fp-cb:checked')).map((c) => Number(c.value));
+      if (!idx.length) { showToast('请至少选择一个文件', 'warning'); return; }
+      try {
+        await API.selectDownloadFiles(gid, idx);
+        showToast('已更新下载文件选择', 'success');
+        hideModal();
+        refreshDownloads();
+      } catch (e) {
+        showToast('设置失败: ' + e.message, 'error');
+      }
+    };
   }
 
 
@@ -1355,6 +1412,114 @@
     el.src = url;
   }
 
+
+
+  /* ══════════════════════════════════════════════════════
+     RSS Subscriptions
+     ══════════════════════════════════════════════════════ */
+
+  async function renderRss() {
+    const main = document.getElementById('main-content');
+    main.innerHTML = `
+      <div class="page-header"><h1 class="page-title">📡 RSS 订阅</h1>
+        <button class="btn-primary btn-sm" id="rss-add-btn">＋ 添加订阅</button>
+      </div>
+      <p class="text-muted text-sm" style="margin:-8px 0 18px">每 15 分钟自动检查；标题匹配「过滤词」的新条目会自动加入下载。过滤词支持关键词或正则,留空=全部。</p>
+      <div id="rss-list">${netEmpty('⏳', '加载中…')}</div>
+    `;
+    document.getElementById('rss-add-btn').onclick = rssAddModal;
+    await refreshRss();
+  }
+
+  async function refreshRss() {
+    const box = document.getElementById('rss-list');
+    if (!box) return;
+    let subs = [];
+    try {
+      const r = await API.listRss();
+      subs = (r && r.subs) || [];
+    } catch (e) {
+      box.innerHTML = netEmpty('❌', '加载失败', e.message);
+      return;
+    }
+    if (!subs.length) {
+      box.innerHTML = netEmpty('📡', '暂无订阅', '点击右上角「添加订阅」,填入 RSS 链接');
+      return;
+    }
+    box.innerHTML = subs.map((s) => `
+      <div class="settings-card" style="margin-bottom:12px">
+        <div class="flex flex-between items-center gap-12" style="flex-wrap:wrap">
+          <div style="min-width:0;flex:1">
+            <div class="font-semibold" style="word-break:break-all">${escapeHtml(s.name)} ${s.enabled ? '' : '<span class="badge badge-paused">已暂停</span>'}</div>
+            <div class="text-muted text-xs" style="word-break:break-all;margin-top:3px">${escapeHtml(s.url)}</div>
+            <div class="text-muted text-xs" style="margin-top:3px">
+              过滤: ${s.filter ? escapeHtml(s.filter) : '全部'} ·
+              ${s.lastCheck ? '上次: ' + formatDate(s.lastCheck) : '未检查'}
+              ${s.lastError ? ' · <span class="text-danger">' + escapeHtml(s.lastError) + '</span>' : ''}
+            </div>
+          </div>
+          <div class="flex gap-4" style="flex-shrink:0">
+            <button class="btn-icon" title="立即检查" data-rss="check" data-id="${s.id}">🔄</button>
+            <button class="btn-icon" title="${s.enabled ? '暂停' : '启用'}" data-rss="toggle" data-id="${s.id}">${s.enabled ? '⏸️' : '▶️'}</button>
+            <button class="btn-icon danger" title="删除" data-rss="delete" data-id="${s.id}" data-name="${escapeHtml(s.name)}">🗑️</button>
+          </div>
+        </div>
+      </div>`).join('');
+
+    box.querySelectorAll('[data-rss]').forEach((btn) => {
+      btn.onclick = async () => {
+        const id = btn.dataset.id;
+        const act = btn.dataset.rss;
+        try {
+          if (act === 'check') {
+            showToast('检查中…', 'info');
+            const r = await API.checkRss(id);
+            showToast(r.added ? `新增 ${r.added} 个下载` : '没有新内容', 'success');
+          } else if (act === 'toggle') {
+            await API.toggleRss(id);
+          } else if (act === 'delete') {
+            const nm = btn.dataset.name || '该订阅';
+            showModal('删除订阅',
+              `<p style="color:var(--text-secondary);font-size:0.9rem">确定删除订阅 <strong style="color:var(--text-primary)">${escapeHtml(nm)}</strong> 吗?</p>`,
+              `<button class="btn-secondary" onclick="window._hideModal()">取消</button><button class="btn-danger" id="rss-del-ok">删除</button>`);
+            document.getElementById('rss-del-ok').onclick = async () => {
+              try { await API.deleteRss(id); hideModal(); showToast('已删除', 'success'); refreshRss(); }
+              catch (e) { showToast('删除失败: ' + e.message, 'error'); }
+            };
+            return;
+          }
+          refreshRss();
+        } catch (e) {
+          showToast('操作失败: ' + e.message, 'error');
+        }
+      };
+    });
+  }
+
+  function rssAddModal() {
+    const body = `
+      <div class="form-group"><label class="form-label">名称</label>
+        <input type="text" id="rss-name" class="form-input" placeholder="例如 某追番源"></div>
+      <div class="form-group"><label class="form-label">RSS 链接</label>
+        <input type="text" id="rss-url" class="form-input" placeholder="https://..."></div>
+      <div class="form-group" style="margin-bottom:0"><label class="form-label">过滤词(可选,关键词或正则)</label>
+        <input type="text" id="rss-filter" class="form-input" placeholder="留空=全部,如 1080p 或 第.*集">
+        <p class="form-hint">仅标题匹配的新条目会自动下载。添加时会以当前内容为基线,只对之后的新条目生效。</p></div>`;
+    const footer = `<button class="btn-secondary" onclick="window._hideModal()">取消</button><button class="btn-primary" id="rss-save">添加</button>`;
+    showModal('添加 RSS 订阅', body, footer);
+    document.getElementById('rss-save').onclick = async () => {
+      const url = document.getElementById('rss-url').value.trim();
+      if (!url) { showToast('请填写 RSS 链接', 'warning'); return; }
+      try {
+        await API.addRss(document.getElementById('rss-name').value.trim(), url, document.getElementById('rss-filter').value.trim());
+        showToast('订阅已添加', 'success');
+        hideModal();
+        refreshRss();
+      } catch (e) {
+        showToast('添加失败: ' + e.message, 'error');
+      }
+    };
+  }
 
 
   /* ══════════════════════════════════════════════════════

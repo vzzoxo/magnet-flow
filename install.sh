@@ -90,6 +90,7 @@ if [ ! -f "${INSTALL_DIR}/.env" ]; then
   ADMIN_PASS="$(node -e 'console.log(require("crypto").randomBytes(9).toString("base64url"))')"
   cat > "${INSTALL_DIR}/.env" <<EOF
 PORT=${PORT}
+HOST=0.0.0.0
 JWT_SECRET=${JWT_SECRET}
 DOWNLOAD_DIR=${DOWNLOAD_DIR}
 ARIA2_RPC_URL=http://localhost:6800/jsonrpc
@@ -97,6 +98,11 @@ ARIA2_SECRET=${ARIA2_SECRET}
 RCLONE_RC_URL=http://127.0.0.1:5572
 AUTO_CLEAR_COMPLETED=true
 AUTO_CLEAR_DELAY_SEC=15
+AUTO_UPLOAD_REMOTE=
+AUTO_UPLOAD_DEST=
+NOTIFY_TELEGRAM_BOT_TOKEN=
+NOTIFY_TELEGRAM_CHAT_ID=
+NOTIFY_BARK_URL=
 INITIAL_ADMIN_PASSWORD=${ADMIN_PASS}
 EOF
   chmod 600 "${INSTALL_DIR}/.env"
@@ -147,6 +153,8 @@ bt-enable-lpd=true
 listen-port=6881-6999
 dht-listen-port=6881-6999
 follow-torrent=true
+bt-save-metadata=true
+bt-load-saved-metadata=true
 
 bt-max-peers=200
 bt-max-open-files=256
@@ -174,6 +182,7 @@ ExecStart=${ARIA2_BIN} --conf-path=${ARIA2_DIR}/aria2.conf
 Restart=always
 RestartSec=3
 User=root
+LimitNOFILE=1048576
 
 [Install]
 WantedBy=multi-user.target
@@ -233,6 +242,36 @@ chmod 644 /etc/cron.d/magnetflow-trackers
 systemctl enable cron >/dev/null 2>&1 || true
 systemctl restart cron >/dev/null 2>&1 || true
 c_ok "已配置每日自动更新 tracker (03:00)"
+
+# ── 8c. 磁盘守护 + 配置备份 (cron) ───────────────────────────────────────────
+cat > /etc/cron.d/magnetflow-diskguard <<EOF
+# MagnetFlow: pause downloads when free disk < 2GB
+*/10 * * * * root DOWNLOAD_DIR=${DOWNLOAD_DIR} MIN_FREE_GB=2 /usr/bin/python3 ${INSTALL_DIR}/scripts/disk-guard.py >/dev/null 2>&1
+EOF
+cat > /etc/cron.d/magnetflow-backup <<EOF
+# MagnetFlow: daily config/user backup at 03:30
+30 3 * * * root APP_DIR=${INSTALL_DIR} /bin/bash ${INSTALL_DIR}/scripts/backup.sh >/dev/null 2>&1
+EOF
+chmod 644 /etc/cron.d/magnetflow-diskguard /etc/cron.d/magnetflow-backup
+c_ok "已配置磁盘守护(每10分钟) + 配置备份(每日03:30)"
+
+# ── 8d. 日志轮转 + BBR 网络调优 ──────────────────────────────────────────────
+cat > /etc/logrotate.d/magnetflow <<'EOF'
+/root/.aria2/*.log {
+    weekly
+    rotate 8
+    compress
+    missingok
+    notifempty
+    copytruncate
+}
+EOF
+cat > /etc/sysctl.d/99-magnetflow.conf <<'EOF'
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+EOF
+sysctl --system >/dev/null 2>&1 || true
+c_ok "已配置日志轮转 + BBR"
 
 # ── 9. 完成 ──────────────────────────────────────────────────────────────────
 IP="$(curl -s -m 5 https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')"

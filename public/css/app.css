@@ -407,6 +407,14 @@ img { display: block; }
   border-radius: var(--radius-md); transition: var(--transition-fast); }
 .action-menu-item:hover { background: var(--bg-hover); }
 .action-menu-item.danger { color: var(--danger); }
+/* Torrent file-selection list */
+.file-pick-list { display: flex; flex-direction: column; gap: 4px; max-height: 50vh; overflow-y: auto; }
+.file-pick { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.45); border: 1px solid var(--border); cursor: pointer; }
+.file-pick:hover { background: var(--bg-hover); }
+.file-pick input { width: 17px; height: 17px; accent-color: var(--primary); flex-shrink: 0; }
+.fp-name { flex: 1; font-size: 0.88rem; overflow-wrap: anywhere; }
+.fp-size { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
 
 /* ── Player ─────────────────────────────────────────────────────────────── */
 .player-container { overflow: hidden; border-radius: var(--radius-lg); background: #000;

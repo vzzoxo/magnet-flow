@@ -26,6 +26,7 @@ const {
 } = require('./lib/config');
 const { notify, notifyEnabled } = require('./lib/notify');
 const { startUpload } = require('./lib/uploader');
+const rss = require('./lib/rss');
 
 // Fail fast if the JWT secret is missing or left at the insecure default.
 assertSecretConfigured();
@@ -60,6 +61,7 @@ app.use('/api/files', require('./routes/files'));
 app.use('/api/stream', require('./routes/stream'));
 app.use('/api/system', require('./routes/system'));
 app.use('/api/remotes', require('./routes/remotes'));
+app.use('/api/rss', require('./routes/rss'));
 
 // Unknown API routes return JSON 404 (not the SPA HTML fallback below).
 app.use('/api', (req, res) => {
@@ -371,6 +373,13 @@ async function initialize() {
 
   // Start polling aria2
   startPolling();
+
+  // RSS subscriptions: check every 15 minutes (and once shortly after boot).
+  const RSS_INTERVAL_MS = 15 * 60 * 1000;
+  const rssTick = () => rss.checkAll().catch((e) => console.error('[MagnetFlow][RSS]', e.message));
+  setTimeout(rssTick, 30 * 1000);
+  const rssInterval = setInterval(rssTick, RSS_INTERVAL_MS);
+  if (typeof rssInterval.unref === 'function') { /* keep running */ }
 
   // Check aria2 connectivity
   try {

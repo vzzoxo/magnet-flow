@@ -19,6 +19,11 @@
 - 📁 **文件管理** — 浏览、复制、移动 / 重命名、删除、解压（zip/rar/7z/tar…），毛玻璃风格文件浏览器。
 - ☁️ **网盘集成（rclone）** — 一键把文件上传到 OneDrive / Google Drive 等；并提供「网盘浏览器」在线播放云端的视频与音乐（类 Alist）。
 - 🧹 **完成自动清理** — 下载完成后自动清理任务记录（文件保留），列表清爽。
+- 📡 **RSS 订阅** — 订阅 RSS，按标题关键词/正则自动追新下载（每 15 分钟检查）。
+- ⬆️ **完成自动上传** — 下载完成可自动推送到指定网盘（rclone），本地保留。
+- 🔔 **完成通知** — 下载完成推送到 Telegram / Bark。
+- 🧲 **种子选文件** — 多文件种子可勾选只下需要的文件。
+- 🛡️ **运维** — aria2/应用/rclone 均 systemd 托管；磁盘不足自动暂停；每日备份配置与 tracker 列表；BBR 网络调优。
 - 🔒 **安全** — JWT 登录、bcrypt 口令、登录限流、路径穿越防护、SSRF 拦截、解压 zip-slip 校验、短时单文件串流令牌。
 - 🎨 **现代 UI** — 响应式、毛玻璃拟态、深浅渐变，移动端可用。
 
@@ -61,6 +66,10 @@ bash <(curl -sL https://raw.githubusercontent.com/vzzoxo/magnet-flow/main/instal
 | `RCLONE_RC_URL` | rclone rc 地址 | `http://127.0.0.1:5572` |
 | `AUTO_CLEAR_COMPLETED` | 完成后自动清理记录 | `true` |
 | `AUTO_CLEAR_DELAY_SEC` | 清理前保留秒数 | `15` |
+| `AUTO_UPLOAD_REMOTE` | 完成后自动上传到的 rclone 网盘名（空=关闭） | — |
+| `AUTO_UPLOAD_DEST` | 自动上传的网盘目标文件夹 | — |
+| `NOTIFY_TELEGRAM_BOT_TOKEN` / `NOTIFY_TELEGRAM_CHAT_ID` | Telegram 完成通知 | — |
+| `NOTIFY_BARK_URL` | Bark 完成通知地址 | — |
 | `INITIAL_ADMIN_PASSWORD` | 首次创建 admin 的密码（不填则随机并打印一次） | — |
 
 ## ☁️ 连接网盘（OneDrive / Google Drive）
