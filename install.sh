@@ -139,7 +139,7 @@ save-session-interval=60
 force-save=true
 
 max-concurrent-downloads=10
-optimize-concurrent-downloads=true
+optimize-concurrent-downloads=false
 max-connection-per-server=16
 split=16
 min-split-size=1M
