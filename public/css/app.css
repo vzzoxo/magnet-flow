@@ -488,21 +488,51 @@ img { display: block; }
   font-size: 3.4rem; background: var(--gradient-primary); border-radius: var(--radius-xl); box-shadow: var(--shadow-glow); }
 .audio-name { font-weight: 600; font-size: 1rem; text-align: center; word-break: break-all; }
 
+/* Horizontal-scroll wrapper for wide tables on small screens */
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
 /* ── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 860px) {
-  .mobile-header { display: flex; }
-  .sidebar { transform: translateX(-100%); transition: transform var(--transition); box-shadow: var(--shadow-lg); }
+  .mobile-header { display: flex; padding-top: calc(12px + env(safe-area-inset-top)); }
+  .sidebar { transform: translateX(-100%); transition: transform var(--transition); box-shadow: var(--shadow-lg); width: min(82vw, 300px); }
   .sidebar.open { transform: translateX(0); }
-  .main-content { margin-left: 0; padding: 20px 16px 48px; }
+  .main-content { margin-left: 0; padding: 18px 14px calc(48px + env(safe-area-inset-bottom)); }
   .sidebar-overlay.show { display: block; }
-  .page-title { font-size: 1.3rem; }
-  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-  .file-table thead th:nth-child(5), .file-table tbody td:nth-child(5) { display: none; } /* hide 修改时间 on small screens */
-  .toast-container { left: 16px; right: 16px; max-width: none; }
+  .page-header { gap: 10px; margin-bottom: 18px; }
+  .page-title { font-size: 1.25rem; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; }
+  .stat-card { padding: 16px; }
+  .stat-value { font-size: 1.45rem; }
+
+  /* Wide tables scroll horizontally instead of breaking the layout */
+  .table-wrap .file-table { min-width: 520px; }
+  .file-table thead th, .file-table tbody td { padding: 11px 12px; }
+
+  /* Bigger touch targets */
+  .btn-icon { width: 40px; height: 40px; }
+  .nav-link { padding: 13px 14px; }
+
+  /* Prevent iOS auto-zoom when focusing inputs (needs >=16px) */
+  .form-input, .form-select { font-size: 16px; }
+
+  .toast-container { left: 14px; right: 14px; max-width: none; }
+  .uploads-panel { left: 14px; right: 14px; bottom: 14px; width: auto; }
+  .modal { max-width: 100%; }
+  .player-container video { max-height: 64vh; }
 }
+
 @media (max-width: 480px) {
-  .stats-grid { grid-template-columns: 1fr 1fr; }
-  .login-card { padding: 32px 24px; }
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .login-card { padding: 30px 22px; }
+  .page-title { font-size: 1.15rem; }
+  .download-card { padding: 15px 16px; }
+  .download-name { font-size: 0.9rem; }
+  .audio-art { width: 96px; height: 96px; font-size: 2.6rem; }
+}
+
+/* Landscape phone — give the player most of the screen (near-fullscreen feel) */
+@media (max-height: 500px) and (orientation: landscape) {
+  .player-container video { max-height: 96vh; }
 }
 
 /* Respect reduced motion */

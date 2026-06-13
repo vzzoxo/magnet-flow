@@ -962,6 +962,7 @@
     });
 
     content.innerHTML = `
+      <div class="table-wrap">
       <table class="file-table">
         <thead>
           <tr>
@@ -1002,6 +1003,7 @@
           }).join('')}
         </tbody>
       </table>
+      </div>
     `;
 
     // Row click navigation
@@ -1105,7 +1107,8 @@
       </div>
 
       <div class="player-container">
-        <video id="video-player" controls preload="auto" width="100%" crossorigin="anonymous">
+        <video id="video-player" controls preload="auto" width="100%" crossorigin="anonymous"
+               playsinline webkit-playsinline x5-playsinline x5-video-player-type="h5-page">
           您的浏览器不支持 Video 标签。
         </video>
       </div>
@@ -1232,10 +1235,12 @@
       </div>
       <div class="breadcrumb" id="netdisk-breadcrumb">${crumbs.join('')}</div>
       ${data.items.length ? `
+      <div class="table-wrap">
       <table class="file-table">
         <thead><tr><th width="40"></th><th>名称</th><th width="110">大小</th><th width="160">修改时间</th></tr></thead>
         <tbody>${rows}</tbody>
-      </table>` : netEmpty('📂', '空文件夹')}
+      </table>
+      </div>` : netEmpty('📂', '空文件夹')}
     `;
 
     document.getElementById('netdisk-remote').onchange = (e) => {
@@ -1278,7 +1283,7 @@
            <div class="audio-name">${escapeHtml(name)}</div>
            <audio id="net-media" controls autoplay style="width:100%"></audio>
          </div>`
-      : `<div class="player-container"><video id="net-media" controls autoplay preload="auto" width="100%"></video></div>`;
+      : `<div class="player-container"><video id="net-media" controls autoplay preload="auto" width="100%" playsinline webkit-playsinline x5-playsinline x5-video-player-type="h5-page"></video></div>`;
 
     main.innerHTML = `
       <div class="page-header flex gap-16 items-center">
