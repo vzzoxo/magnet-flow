@@ -18,3 +18,6 @@ npm-debug.log*
 *.swp
 .idea/
 .vscode/
+
+# Local backups (contain secrets)
+backups/
