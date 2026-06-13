@@ -138,7 +138,7 @@ save-session=${ARIA2_DIR}/aria2.session
 save-session-interval=60
 force-save=true
 
-max-concurrent-downloads=8
+max-concurrent-downloads=10
 optimize-concurrent-downloads=true
 max-connection-per-server=16
 split=16
