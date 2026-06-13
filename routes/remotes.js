@@ -314,4 +314,79 @@ router.get('/stream-token', async (req, res) => {
   }
 });
 
+/**
+ * GET /info
+ * Remotes with their type and (cached) storage quota — for the picker UI.
+ */
+const _aboutCache = new Map(); // remote -> { at, data }
+async function aboutCached(remote) {
+  const c = _aboutCache.get(remote);
+  if (c && Date.now() - c.at < 5 * 60 * 1000) return c.data;
+  let data = null;
+  try { data = await rclone.about(remote); } catch { data = null; }
+  _aboutCache.set(remote, { at: Date.now(), data });
+  return data;
+}
+
+router.get('/info', async (req, res) => {
+  try {
+    const names = remoteNames((await rclone.listRemotes()).remotes);
+    let dump = {};
+    try { dump = await rclone.configDump(); } catch { /* ignore */ }
+    const out = [];
+    for (const name of names) {
+      const type = (dump[name] && dump[name].type) || '';
+      const about = await aboutCached(name);
+      out.push({
+        name,
+        type,
+        total: about && about.total != null ? Number(about.total) : null,
+        used: about && about.used != null ? Number(about.used) : null,
+        free: about && about.free != null ? Number(about.free) : null,
+      });
+    }
+    res.json({ remotes: out });
+  } catch (err) {
+    console.error('[MagnetFlow] Remotes info error:', err.message);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /mkdir  { remote, path }
+ * Create a folder on a cloud remote.
+ */
+router.post('/mkdir', async (req, res) => {
+  try {
+    const { remote, path: dir } = req.body;
+    if (!remote || !dir) return res.status(400).json({ error: 'remote and path are required' });
+    const configured = remoteNames((await rclone.listRemotes()).remotes);
+    if (!configured.includes(remote)) return res.status(400).json({ error: `Unknown remote: ${remote}` });
+    await rclone.mkdir(remote, String(dir).replace(/^\/+/, ''));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /delete  { remote, path, isDir }
+ * Delete a file or folder on a cloud remote.
+ */
+router.post('/delete', async (req, res) => {
+  try {
+    const { remote, path: target, isDir } = req.body;
+    if (!remote || !target) return res.status(400).json({ error: 'remote and path are required' });
+    const configured = remoteNames((await rclone.listRemotes()).remotes);
+    if (!configured.includes(remote)) return res.status(400).json({ error: `Unknown remote: ${remote}` });
+    const p = String(target).replace(/^\/+/, '');
+    if (isDir) await rclone.purge(remote, p);
+    else await rclone.deleteFile(remote, p);
+    console.log(`[MagnetFlow] Cloud delete ${remote}:${p} (dir=${!!isDir})`);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 module.exports = router;

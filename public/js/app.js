@@ -1263,6 +1263,138 @@
       ${desc ? `<div class="empty-state-desc">${escapeHtml(desc)}</div>` : ''}</div>`;
   }
 
+  function netSkeleton() {
+    return `<div class="skeleton-list">${Array.from({ length: 7 }).map(() => '<div class="skeleton-row"></div>').join('')}</div>`;
+  }
+
+  // Colour-coded file-type SVG icons (consistent with the rest of the UI).
+  const FT_ICONS = {
+    folder: SVG('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
+    video: SVG('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/>'),
+    audio: SVG('<path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/>'),
+    image: SVG('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>'),
+    archive: SVG('<path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M10 12h4"/>'),
+    doc: SVG('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/>'),
+    file: SVG('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>'),
+    cloud: SVG('<path d="M17.5 19a4.5 4.5 0 0 0 .5-8.96A6 6 0 0 0 6.4 9 4.5 4.5 0 0 0 7 18h10.5Z"/>'),
+    list: SVG('<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>'),
+    grid: SVG('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'),
+  };
+  function ftType(name, isDir) {
+    if (isDir) return 'folder';
+    const e = getExtension(name);
+    if (VIDEO_EXTS.has(e)) return 'video';
+    if (AUDIO_EXTS.has(e)) return 'audio';
+    if (IMAGE_EXTS.has(e)) return 'image';
+    if (ARCHIVE_EXTS.has(e)) return 'archive';
+    if (DOC_EXTS.has(e)) return 'doc';
+    return 'file';
+  }
+  function ftIcon(name, isDir) {
+    const t = ftType(name, isDir);
+    return `<span class="ftype ftype-${t}">${FT_ICONS[t]}</span>`;
+  }
+  function providerLabel(t) {
+    return ({ onedrive: 'OneDrive', drive: 'Google Drive', dropbox: 'Dropbox', s3: 'S3', b2: 'Backblaze', webdav: 'WebDAV', ftp: 'FTP', sftp: 'SFTP', mega: 'MEGA' })[t] || (t || '');
+  }
+  function remoteCardHtml(info) {
+    let cap = '';
+    if (info.total) {
+      const pct = Math.min(100, Math.round((Number(info.used || 0) / Number(info.total)) * 100));
+      cap = `<div class="remote-cap"><div class="remote-cap-bar"><div class="remote-cap-fill" style="width:${pct}%"></div></div>
+        <div class="remote-cap-text">${formatBytes(info.used)} / ${formatBytes(info.total)}</div></div>`;
+    }
+    const label = providerLabel(info.type);
+    return `<button class="remote-card" data-remote="${escapeHtml(info.name)}">
+      <span class="remote-card-icon ftype-cloud">${FT_ICONS.cloud}</span>
+      <span class="remote-card-name">${escapeHtml(info.name)}</span>
+      ${label ? `<span class="remote-card-type">${escapeHtml(label)}</span>` : ''}
+      ${cap}
+    </button>`;
+  }
+
+  function netList(items) {
+    const rows = items.map((f) => `
+      <tr class="file-row" data-nd-open data-path="${escapeHtml(f.path)}" data-isdir="${f.isDir}" data-name="${escapeHtml(f.name)}">
+        <td class="text-center">${ftIcon(f.name, f.isDir)}</td>
+        <td class="file-name-cell" title="${escapeHtml(f.name)}"><span class="fname">${escapeHtml(f.name)}</span></td>
+        <td class="text-muted">${f.isDir ? '--' : formatBytes(f.size)}</td>
+        <td class="text-muted col-date">${f.modified ? formatDate(f.modified) : '--'}</td>
+        <td onclick="event.stopPropagation()"><button class="btn-icon" data-nd-more data-path="${escapeHtml(f.path)}" data-isdir="${f.isDir}" data-name="${escapeHtml(f.name)}">⋯</button></td>
+      </tr>`).join('');
+    return `<div class="table-wrap"><table class="file-table">
+      <thead><tr><th width="40"></th><th>名称</th><th width="100">大小</th><th width="150" class="col-date">修改时间</th><th width="48"></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+  }
+  function netGrid(items) {
+    return `<div class="net-grid">${items.map((f) => `
+      <div class="net-cell" data-nd-open data-path="${escapeHtml(f.path)}" data-isdir="${f.isDir}" data-name="${escapeHtml(f.name)}">
+        <button class="net-cell-more" data-nd-more data-path="${escapeHtml(f.path)}" data-isdir="${f.isDir}" data-name="${escapeHtml(f.name)}">⋯</button>
+        <div class="net-cell-icon">${ftIcon(f.name, f.isDir)}</div>
+        <div class="net-cell-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</div>
+        <div class="net-cell-size">${f.isDir ? '文件夹' : formatBytes(f.size)}</div>
+      </div>`).join('')}</div>`;
+  }
+
+  function openLightbox(url, name) {
+    let lb = document.getElementById('lightbox');
+    if (!lb) { lb = document.createElement('div'); lb.id = 'lightbox'; lb.className = 'lightbox'; document.body.appendChild(lb); }
+    lb.innerHTML = `<div class="lightbox-bar"><span class="truncate">${escapeHtml(name)}</span><button class="lightbox-close">✕</button></div><img class="lightbox-img" src="${url}" alt="">`;
+    lb.classList.add('show');
+    const close = () => lb.classList.remove('show');
+    lb.querySelector('.lightbox-close').onclick = close;
+    lb.onclick = (e) => { if (e.target === lb) close(); };
+  }
+
+  function netMkdirModal(remote, relPath, refresh) {
+    showModal('新建文件夹',
+      `<div class="form-group" style="margin-bottom:0"><label class="form-label">文件夹名称</label>
+        <input type="text" id="nd-folder" class="form-input" placeholder="新建文件夹" autofocus></div>`,
+      `<button class="btn-secondary" onclick="window._hideModal()">取消</button><button class="btn-primary" id="nd-mk-ok">创建</button>`);
+    document.getElementById('nd-mk-ok').onclick = async () => {
+      const name = document.getElementById('nd-folder').value.trim();
+      if (!name) { showToast('请输入名称', 'warning'); return; }
+      try {
+        await API.mkdirRemote(remote, relPath ? relPath + '/' + name : name);
+        showToast('文件夹已创建', 'success');
+        hideModal();
+        refresh && refresh();
+      } catch (e) { showToast('创建失败: ' + e.message, 'error'); }
+    };
+  }
+
+  function cloudActionsMenu(remote, f, refresh) {
+    const items = [
+      ...(f.isDir ? [] : [{ a: 'download', t: '⬇️ 下载' }, { a: 'link', t: '🔗 复制直链' }]),
+      { a: 'delete', t: '🗑️ 删除', danger: true },
+    ];
+    showModal(f.name,
+      `<div class="action-menu">${items.map((i) => `<button class="action-menu-item${i.danger ? ' danger' : ''}" data-act="${i.a}">${i.t}</button>`).join('')}</div>`, '');
+    document.querySelectorAll('.action-menu-item').forEach((b) => {
+      b.onclick = async () => {
+        const act = b.dataset.act;
+        hideModal();
+        if (act === 'download') {
+          const w = window.open('', '_blank');
+          const url = await API.getRemoteStreamUrl(remote, f.path);
+          if (w) w.location = url; else window.location = url;
+        } else if (act === 'link') {
+          const abs = location.origin + (await API.getRemoteStreamUrl(remote, f.path));
+          try { await navigator.clipboard.writeText(abs); showToast('直链已复制（约 15 分钟有效）', 'success'); }
+          catch { showModal('直链', `<input class="form-input" value="${escapeHtml(abs)}" onclick="this.select()" readonly>`, `<button class="btn-secondary" onclick="window._hideModal()">关闭</button>`); }
+        } else if (act === 'delete') {
+          showModal('删除',
+            `<p style="color:var(--text-secondary);font-size:0.9rem">确定从网盘删除 <strong style="color:var(--text-primary)">${escapeHtml(f.name)}</strong> 吗？<br><span class="text-danger text-xs">云端文件将被删除，不可恢复。</span></p>`,
+            `<button class="btn-secondary" onclick="window._hideModal()">取消</button><button class="btn-danger" id="nd-del-ok">删除</button>`);
+          document.getElementById('nd-del-ok').onclick = async () => {
+            try { await API.deleteRemote(remote, f.path, f.isDir); hideModal(); showToast('已删除', 'success'); refresh && refresh(); }
+            catch (e) { showToast('删除失败: ' + e.message, 'error'); }
+          };
+        }
+      };
+    });
+  }
+
   async function renderNetdisk(param) {
     const main = document.getElementById('main-content');
     const slash = param.indexOf('/');
@@ -1271,31 +1403,19 @@
 
     main.innerHTML = `
       <div class="page-header"><h1 class="page-title">☁️ 网盘</h1></div>
-      <div id="netdisk-content">${netEmpty('⏳', '加载中…')}</div>
-    `;
+      <div id="netdisk-content">${netSkeleton()}</div>`;
     const content = document.getElementById('netdisk-content');
 
-    let remotes = [];
-    try {
-      const r = await API.listRemotes();
-      remotes = (r && r.remotes) || [];
-    } catch (err) {
-      content.innerHTML = netEmpty('❌', '加载失败', err.message);
-      return;
-    }
+    let names = [];
+    try { names = ((await API.listRemotes()).remotes) || []; }
+    catch (err) { content.innerHTML = netEmpty('❌', '加载失败', err.message); return; }
+    if (!names.length) { content.innerHTML = netEmpty('☁️', '尚未连接网盘', '请先在服务器用 rclone 连接 OneDrive / Google Drive'); return; }
 
-    if (!remotes.length) {
-      content.innerHTML = netEmpty('☁️', '尚未连接网盘', '请先在服务器用 rclone 连接 OneDrive / Google Drive');
-      return;
-    }
-
-    // No remote chosen yet → show a picker.
-    if (!remote || !remotes.includes(remote)) {
-      content.innerHTML = `<div class="remote-grid">${remotes
-        .map((r) => `<button class="remote-card" data-remote="${escapeHtml(r)}">
-            <span class="remote-card-icon">☁️</span><span class="remote-card-name">${escapeHtml(r)}</span>
-          </button>`)
-        .join('')}</div>`;
+    // Remote picker (with provider icon + capacity)
+    if (!remote || !names.includes(remote)) {
+      let infos = names.map((n) => ({ name: n, type: '', total: null, used: null }));
+      try { const r = await API.remotesInfo(); if (r && r.remotes && r.remotes.length) infos = r.remotes; } catch { /* ignore */ }
+      content.innerHTML = `<div class="remote-grid">${infos.map(remoteCardHtml).join('')}</div>`;
       content.querySelectorAll('.remote-card').forEach((b) => {
         b.onclick = () => { window.location.hash = '#netdisk/' + encodeURIComponent(b.dataset.remote); };
       });
@@ -1303,20 +1423,15 @@
     }
 
     let data;
-    try {
-      data = await API.browseRemote(remote, relPath);
-    } catch (err) {
-      content.innerHTML = netEmpty('❌', '无法读取该网盘目录', err.message);
-      return;
-    }
+    try { data = await API.browseRemote(remote, relPath); }
+    catch (err) { content.innerHTML = netEmpty('❌', '无法读取该网盘目录', err.message); return; }
 
-    const remoteOptions = remotes
-      .map((r) => `<option value="${escapeHtml(r)}" ${r === remote ? 'selected' : ''}>${escapeHtml(r)}</option>`)
-      .join('');
+    const view = localStorage.getItem('mf_netview') === 'grid' ? 'grid' : 'list';
+    const refresh = () => renderNetdisk(param);
 
     const segs = relPath ? relPath.split('/') : [];
     let acc = '';
-    const crumbs = [`<span class="breadcrumb-item" data-go="">${escapeHtml(remote)}</span>`];
+    const crumbs = [`<span class="breadcrumb-item" data-go="">🏠 ${escapeHtml(remote)}</span>`];
     segs.forEach((s, i) => {
       acc = acc ? acc + '/' + s : s;
       crumbs.push('<span class="breadcrumb-sep">/</span>');
@@ -1325,54 +1440,40 @@
         : `<span class="breadcrumb-item" data-go="${escapeHtml(acc)}">${escapeHtml(s)}</span>`);
     });
 
-    const rows = data.items.map((f) => {
-      const icon = f.isDir ? '📁' : getFileIcon(f.name, false);
-      const sizeStr = f.isDir ? '--' : formatBytes(f.size);
-      const playable = !f.isDir && (isVideoFile(f.name) || isAudioFile(f.name));
-      return `
-        <tr class="file-row" data-path="${escapeHtml(f.path)}" data-isdir="${f.isDir}" data-playable="${playable}">
-          <td class="text-center">${icon}</td>
-          <td class="file-name-cell" title="${escapeHtml(f.name)}"><span class="fname">${escapeHtml(f.name)}</span></td>
-          <td class="text-muted">${sizeStr}</td>
-          <td class="text-muted col-date">${f.modified ? formatDate(f.modified) : '--'}</td>
-        </tr>`;
-    }).join('');
-
     content.innerHTML = `
-      <div class="file-toolbar">
-        <select id="netdisk-remote" class="form-select" style="max-width:200px">${remoteOptions}</select>
+      <div class="file-toolbar netdisk-toolbar">
+        <select id="netdisk-remote" class="form-select" style="max-width:170px">${names.map((n) => `<option value="${escapeHtml(n)}"${n === remote ? ' selected' : ''}>${escapeHtml(n)}</option>`).join('')}</select>
+        <button class="btn-secondary btn-sm" id="nd-mkdir">📂 新建文件夹</button>
+        <div class="view-toggle">
+          <button class="vt-btn ${view === 'list' ? 'active' : ''}" data-view="list" title="列表">${FT_ICONS.list}</button>
+          <button class="vt-btn ${view === 'grid' ? 'active' : ''}" data-view="grid" title="网格">${FT_ICONS.grid}</button>
+        </div>
       </div>
       <div class="breadcrumb" id="netdisk-breadcrumb">${crumbs.join('')}</div>
-      ${data.items.length ? `
-      <div class="table-wrap">
-      <table class="file-table">
-        <thead><tr><th width="40"></th><th>名称</th><th width="110">大小</th><th width="160" class="col-date">修改时间</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      </div>` : netEmpty('📂', '空文件夹')}
-    `;
+      ${data.items.length ? (view === 'grid' ? netGrid(data.items) : netList(data.items)) : netEmpty('📂', '空文件夹')}`;
 
-    document.getElementById('netdisk-remote').onchange = (e) => {
-      window.location.hash = '#netdisk/' + encodeURIComponent(e.target.value);
-    };
+    document.getElementById('netdisk-remote').onchange = (e) => { window.location.hash = '#netdisk/' + encodeURIComponent(e.target.value); };
+    document.getElementById('nd-mkdir').onclick = () => netMkdirModal(remote, relPath, refresh);
+    content.querySelectorAll('.vt-btn').forEach((b) => { b.onclick = () => { localStorage.setItem('mf_netview', b.dataset.view); renderNetdisk(param); }; });
     content.querySelectorAll('#netdisk-breadcrumb .breadcrumb-item[data-go]').forEach((el) => {
-      el.onclick = () => {
-        const go = el.getAttribute('data-go');
-        window.location.hash = '#netdisk/' + encodeURIComponent(remote) + (go ? '/' + encodeURIComponent(go) : '');
-      };
+      el.onclick = () => { const go = el.getAttribute('data-go'); window.location.hash = '#netdisk/' + encodeURIComponent(remote) + (go ? '/' + encodeURIComponent(go) : ''); };
     });
-    content.querySelectorAll('.file-row').forEach((row) => {
-      row.onclick = async () => {
-        const p = row.dataset.path;
-        if (row.dataset.isdir === 'true') {
-          window.location.hash = '#netdisk/' + encodeURIComponent(remote) + '/' + encodeURIComponent(p);
-        } else if (row.dataset.playable === 'true') {
-          window.location.hash = '#netplay/' + encodeURIComponent(remote) + '/' + encodeURIComponent(p);
-        } else {
-          const w = window.open('', '_blank');
-          const url = await API.getRemoteStreamUrl(remote, p);
-          if (w) w.location = url; else window.location = url;
-        }
+
+    const openItem = async (p, isDir, name) => {
+      if (isDir) { window.location.hash = '#netdisk/' + encodeURIComponent(remote) + '/' + encodeURIComponent(p); return; }
+      if (isVideoFile(name) || isAudioFile(name)) { window.location.hash = '#netplay/' + encodeURIComponent(remote) + '/' + encodeURIComponent(p); return; }
+      if (IMAGE_EXTS.has(getExtension(name))) { openLightbox(await API.getRemoteStreamUrl(remote, p), name); return; }
+      const w = window.open('', '_blank');
+      const url = await API.getRemoteStreamUrl(remote, p);
+      if (w) w.location = url; else window.location = url;
+    };
+    content.querySelectorAll('[data-nd-open]').forEach((el) => {
+      el.onclick = () => openItem(el.dataset.path, el.dataset.isdir === 'true', el.dataset.name);
+    });
+    content.querySelectorAll('[data-nd-more]').forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        cloudActionsMenu(remote, { path: btn.dataset.path, name: btn.dataset.name, isDir: btn.dataset.isdir === 'true' }, refresh);
       };
     });
   }

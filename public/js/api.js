@@ -197,6 +197,14 @@ window.API = (function () {
       );
     },
 
+    remotesInfo() { return api.request('/api/remotes/info'); },
+    mkdirRemote(remote, path) {
+      return api.request('/api/remotes/mkdir', { method: 'POST', body: JSON.stringify({ remote, path }) });
+    },
+    deleteRemote(remote, path, isDir) {
+      return api.request('/api/remotes/delete', { method: 'POST', body: JSON.stringify({ remote, path, isDir }) });
+    },
+
     // Fetch a scoped token, then build the cloud stream URL.
     async getRemoteStreamUrl(remote, filePath) {
       let token = '';
