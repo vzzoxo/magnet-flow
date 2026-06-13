@@ -110,6 +110,12 @@ fi
 
 # ── 7. aria2 配置 ────────────────────────────────────────────────────────────
 c_info "写入 aria2 配置…"
+# 从 GitHub 拉取最新 BT tracker 列表（失败则使用内置备用列表）
+BT_TRACKERS="$(curl -fsSL -m 15 https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt 2>/dev/null | grep -E '^[a-z]+://' | paste -sd, -)"
+if [ -z "${BT_TRACKERS}" ]; then
+  BT_TRACKERS="udp://tracker.opentrackr.org:1337/announce,udp://open.demonii.com:1337/announce,udp://open.stealth.si:80/announce,udp://tracker.torrent.eu.org:451/announce,udp://tracker.dler.org:6969/announce,udp://tracker.bittor.pw:1337/announce,udp://tracker-udp.gbitt.info:80/announce,udp://tracker.qu.ax:6969/announce"
+  c_warn "tracker 列表拉取失败，使用内置备用列表"
+fi
 cat > "${ARIA2_DIR}/aria2.conf" <<EOF
 enable-rpc=true
 rpc-listen-port=6800
@@ -148,7 +154,7 @@ bt-request-peer-speed-limit=50M
 seed-time=0
 seed-ratio=0.0
 
-bt-tracker=udp://zer0day.ch:1337/announce,udp://tracker.publictracker.xyz:6969/announce,udp://tracker.opentrackr.org:1337/announce,udp://open.demonii.com:1337/announce,udp://open.stealth.si:80/announce,udp://yuptracker-eu.gaijinent.com:27022/announce,udp://wepzone.net:6969/announce,udp://tracker2.dler.org:80/announce,udp://tracker.wildkat.net:6969/announce,udp://tracker.tryhackx.org:6969/announce,udp://tracker.torrent.eu.org:451/announce,udp://tracker.t-1.org:6969/announce,udp://tracker.qu.ax:6969/announce,udp://tracker.dler.org:6969/announce,udp://tracker.corpscorp.online:80/announce,udp://tracker.bluefrog.pw:2710/announce,udp://tracker.bittor.pw:1337/announce,udp://tracker.auctor.tv:6969/announce,udp://tracker.004430.xyz:1337/announce,udp://tracker-udp.gbitt.info:80/announce
+bt-tracker=${BT_TRACKERS}
 EOF
 c_ok "aria2 配置就绪"
 
