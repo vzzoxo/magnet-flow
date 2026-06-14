@@ -6,6 +6,11 @@
 
 **自托管的磁力下载 · 在线串流 · 文件管理 · 网盘集成 一体平台**
 
+[![Release](https://img.shields.io/github/v/release/vzzoxo/magnet-flow?color=5e5ce6)](https://github.com/vzzoxo/magnet-flow/releases)
+[![License](https://img.shields.io/github/license/vzzoxo/magnet-flow?color=0a84ff)](LICENSE)
+![Node](https://img.shields.io/badge/Node-%E2%89%A518-3c873a?logo=node.js&logoColor=white)
+![Platform](https://img.shields.io/badge/platform-Debian%20%7C%20Ubuntu-bf5af2)
+
 基于 aria2 + Node.js，毛玻璃拟态苹果风界面，一条命令部署，开箱即用。
 
 </div>
