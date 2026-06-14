@@ -59,6 +59,18 @@ bash <(curl -sL https://raw.githubusercontent.com/vzzoxo/magnet-flow/main/instal
 
 完成后访问 `http://<服务器IP>:3000`，**初始管理员密码会在安装结束时打印一次**，请登录后立即修改。
 
+### 绑定域名 + 自动 HTTPS（推荐）
+
+先把域名的 **A 记录解析到服务器 IP**，再运行脚本。脚本会**交互询问域名**：填入后会自动安装 **Caddy**、签发 Let's Encrypt 证书、把应用改为仅监听 `127.0.0.1` 并反代，访问地址变为 `https://你的域名`。
+
+也可全自动（跳过交互）：
+
+```bash
+DOMAIN=dl.example.com LE_EMAIL=you@example.com bash <(curl -sL https://raw.githubusercontent.com/vzzoxo/magnet-flow/main/install.sh)
+```
+
+> 留空域名则维持 `http://IP:3000` 直连方式。
+
 > 可用环境变量覆盖默认：`INSTALL_DIR`、`DOWNLOAD_DIR`、`PORT`、`REPO_URL`。
 
 ## 🌐 绑定域名 + HTTPS（推荐 Caddy，自动证书）

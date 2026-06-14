@@ -5,7 +5,11 @@
 #   bash <(curl -sL https://raw.githubusercontent.com/vzzoxo/magnet-flow/main/install.sh)
 #
 # Installs system deps, Node.js, rclone, clones the repo, generates secrets,
-# and sets up systemd services (aria2 / magnetflow / rclone-rcd).
+# and sets up systemd services (aria2 / transmission / magnetflow / rclone-rcd),
+# plus optional Caddy reverse proxy with automatic HTTPS when a domain is given.
+#
+#   Fully non-interactive with a domain:
+#     DOMAIN=dl.example.com LE_EMAIL=you@example.com bash <(curl -sL ...)
 #
 set -euo pipefail
 
@@ -15,6 +19,8 @@ DOWNLOAD_DIR="${DOWNLOAD_DIR:-${INSTALL_DIR}/downloads}"
 PORT="${PORT:-3000}"
 ARIA2_DIR="/root/.aria2"
 RCLONE_CONF_DIR="/root/.config/rclone"
+DOMAIN="${DOMAIN:-}"
+LE_EMAIL="${LE_EMAIL:-}"
 
 c_ok()   { printf '\033[32m✓\033[0m %s\n' "$1"; }
 c_info() { printf '\033[36m▸\033[0m %s\n' "$1"; }
@@ -31,6 +37,19 @@ echo "  ╚═══════════════════════
 echo "  安装目录: ${INSTALL_DIR}"
 echo "  下载目录: ${DOWNLOAD_DIR}"
 echo
+
+# ── 0. 交互式询问域名（可选；curl|bash 下从 /dev/tty 读取终端输入）──────────
+if [ -z "${DOMAIN}" ] && [ -r /dev/tty ]; then
+  printf '\033[36m▸\033[0m 若已把域名解析(A 记录)到本机，可输入域名自动配置 HTTPS(Caddy)。\n'
+  printf '  直接回车跳过，则用 http://IP:%s 访问。\n' "${PORT}"
+  read -r -p "  域名 (留空跳过): " DOMAIN < /dev/tty || DOMAIN=""
+  DOMAIN="$(printf '%s' "${DOMAIN}" | tr -d '[:space:]')"
+  if [ -n "${DOMAIN}" ] && [ -z "${LE_EMAIL}" ]; then
+    read -r -p "  证书通知邮箱 (可留空): " LE_EMAIL < /dev/tty || LE_EMAIL=""
+    LE_EMAIL="$(printf '%s' "${LE_EMAIL}" | tr -d '[:space:]')"
+  fi
+fi
+[ -n "${DOMAIN}" ] && c_info "将为 ${DOMAIN} 配置 HTTPS 反向代理（应用仅监听 127.0.0.1）"
 
 # ── 1. System dependencies ──────────────────────────────────────────────────
 c_info "安装系统依赖…"
@@ -113,6 +132,15 @@ else
   ARIA2_SECRET="$(grep -E '^ARIA2_SECRET=' "${INSTALL_DIR}/.env" | cut -d= -f2-)"
   DOWNLOAD_DIR="$(grep -E '^DOWNLOAD_DIR=' "${INSTALL_DIR}/.env" | cut -d= -f2- || echo "${DOWNLOAD_DIR}")"
   c_warn ".env 已存在，沿用现有配置"
+fi
+
+# 反代场景下应用只监听本地，由 Caddy 对外提供 HTTPS。
+if [ -n "${DOMAIN}" ]; then
+  if grep -q '^HOST=' "${INSTALL_DIR}/.env"; then
+    sed -i 's/^HOST=.*/HOST=127.0.0.1/' "${INSTALL_DIR}/.env"
+  else
+    echo 'HOST=127.0.0.1' >> "${INSTALL_DIR}/.env"
+  fi
 fi
 
 # ── 7. aria2 配置 ────────────────────────────────────────────────────────────
@@ -291,6 +319,47 @@ systemctl restart magnetflow
 sleep 2
 c_ok "服务已启动"
 
+# ── 8a. 反向代理 + 自动 HTTPS (Caddy)，仅当提供了域名 ────────────────────────
+if [ -n "${DOMAIN}" ]; then
+  c_info "安装并配置 Caddy（自动申请 HTTPS 证书）…"
+  if ! command -v caddy >/dev/null 2>&1; then
+    apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https gnupg >/dev/null 2>&1 || true
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' 2>/dev/null | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null || true
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' 2>/dev/null > /etc/apt/sources.list.d/caddy-stable.list || true
+    apt-get update -qq || true
+    apt-get install -y -qq caddy >/dev/null 2>&1 || c_warn "Caddy 安装失败，请手动配置反向代理到 127.0.0.1:${PORT}"
+  fi
+  if command -v caddy >/dev/null 2>&1; then
+    EMAIL_LINE=""
+    [ -n "${LE_EMAIL}" ] && EMAIL_LINE=$'\n\ttls '"${LE_EMAIL}"
+    cat > /etc/caddy/Caddyfile <<EOF
+# MagnetFlow — reverse proxy with automatic HTTPS (Let's Encrypt)
+${DOMAIN} {
+	encode zstd gzip${EMAIL_LINE}
+
+	# Drop whatever Cache-Control the app sets, then apply our own.
+	reverse_proxy 127.0.0.1:${PORT} {
+		header_down -Cache-Control
+	}
+
+	# Versioned static assets (?v=) can be cached aggressively.
+	@assets path /css/* /js/* /img/* /favicon.ico
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	# SPA HTML + API must never be served stale.
+	@dynamic not path /css/* /js/* /img/* /favicon.ico
+	header @dynamic Cache-Control "no-store"
+}
+EOF
+    systemctl enable caddy >/dev/null 2>&1 || true
+    if caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1; then
+      systemctl restart caddy && c_ok "Caddy 已配置（https://${DOMAIN}，首次签发证书需几秒）"
+    else
+      c_warn "Caddyfile 校验未通过，请检查 /etc/caddy/Caddyfile"
+    fi
+  fi
+fi
+
 # ── 8b. 每日自动刷新 BT tracker (cron 03:00) ─────────────────────────────────
 cat > /etc/cron.d/magnetflow-trackers <<EOF
 # MagnetFlow: refresh BT trackers daily at 03:00
@@ -333,12 +402,20 @@ c_ok "已配置日志轮转 + BBR"
 
 # ── 8e. 防火墙：若启用了 ufw，放行应用端口与 BT 端口 ─────────────────────────
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
-  ufw allow "${PORT}/tcp" >/dev/null 2>&1 || true
+  if [ -n "${DOMAIN}" ]; then
+    ufw allow 80/tcp >/dev/null 2>&1 || true
+    ufw allow 443/tcp >/dev/null 2>&1 || true
+    ufw allow 443/udp >/dev/null 2>&1 || true
+    c_warn "已放行 80/443（HTTPS）；应用端口 ${PORT} 不对外暴露"
+  else
+    ufw allow "${PORT}/tcp" >/dev/null 2>&1 || true
+    c_warn "已放行应用端口 ${PORT}"
+  fi
   ufw allow 6881:6999/tcp >/dev/null 2>&1 || true
   ufw allow 6881:6999/udp >/dev/null 2>&1 || true
   ufw allow 51413/tcp >/dev/null 2>&1 || true
   ufw allow 51413/udp >/dev/null 2>&1 || true
-  c_warn "已在 ufw 放行 ${PORT} 与 BT 端口 6881-6999；若使用云厂商防火墙(如 DigitalOcean Cloud Firewall)请自行放行这些端口"
+  c_warn "已放行 BT 端口 6881-6999 与 51413；云厂商防火墙(如 DigitalOcean)请自行放行"
 fi
 
 # ── 9. 完成 ──────────────────────────────────────────────────────────────────
@@ -347,7 +424,12 @@ echo
 echo "  ╔══════════════════════════════════════════════╗"
 echo "  ║   MagnetFlow 安装完成 🎉                       ║"
 echo "  ╚══════════════════════════════════════════════╝"
-echo "  访问地址 : http://${IP}:${PORT}"
+if [ -n "${DOMAIN}" ]; then
+  echo "  访问地址 : https://${DOMAIN}"
+  echo "  （DNS 已解析的话，证书会在打开后几秒内自动签发）"
+else
+  echo "  访问地址 : http://${IP}:${PORT}"
+fi
 if [ "${FRESH}" -eq 1 ]; then
   echo "  登录账号 : admin"
   echo "  登录密码 : ${ADMIN_PASS:-<见日志>}"
