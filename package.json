@@ -1,6 +1,6 @@
 {
   "name": "magnet-flow",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Self-hosted magnet download, streaming & file management platform",
   "main": "server.js",
   "scripts": {

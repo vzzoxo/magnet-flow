@@ -1719,7 +1719,7 @@
               <div class="about-name">MagnetFlow</div>
               <div class="about-tagline">自托管磁力下载 · 在线串流 · 文件管理</div>
             </div>
-            <span class="about-version" id="about-version">v2.0.0</span>
+            <span class="about-version" id="about-version">v3.0.0</span>
           </div>
           <p class="about-desc">一个轻量、自托管的下载中心：粘贴磁力链接或下载地址即可交给 aria2 高速下载，支持边下边管、在线播放、网盘上传，并在完成后自动清理记录、保留文件。</p>
           <div class="about-features">
