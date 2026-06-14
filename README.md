@@ -25,7 +25,8 @@
 - 📊 实时进度、速度、连接数与**做种数**（一眼判断是否「死种」）。
 - 📂 多文件种子可**勾选只下需要的文件**。
 - 🧹 下载完成后自动清理任务记录（文件保留），列表清爽。
-- ⚡ 已做下载调优：200 peers、并发 10、64M 磁盘缓存、DHT/PEX/LPD、每日自动更新的 tracker 列表、session 持久化（重启不丢任务）、BBR。
+- ⚡ 两个引擎均已调优：aria2(200 peers、并发 10、64M 缓存、DHT/PEX/LPD、每日自动更新的 tracker 列表、session 持久化)；Transmission(并发 10、500/100 peers、64M 缓存、uTP/DHT/PEX/LPD、下完不做种)；配合 BBR。
+- 🚦 可在设置里调整**全局上传限速**,即时生效。
 
 **播放与文件**
 - 🎬 浏览器**在线播放视频**，支持 HTTP Range 拖动；🎵 在线播放音乐。
@@ -44,7 +45,7 @@
 **运维 & 界面**
 - 🛡️ aria2 / 应用 / rclone 均由 systemd 托管（开机自启、崩溃自拉起）；磁盘不足自动暂停下载；每日备份配置与用户库；日志轮转。
 - 🔒 JWT 登录、bcrypt 口令、登录限流、路径穿越防护、SSRF 拦截、解压 zip-slip 校验、串流用短时单文件令牌、改密码使旧令牌失效。
-- 🎨 毛玻璃拟态苹果风、响应式、完整适配手机端（含播放器全屏）。
+- 🎨 毛玻璃拟态苹果风、响应式、完整适配手机端（含播放器全屏）；侧边栏实时**磁盘容量条**。
 
 ## 🚀 一键部署
 
@@ -54,7 +55,7 @@
 bash <(curl -sL https://raw.githubusercontent.com/vzzoxo/magnet-flow/main/install.sh)
 ```
 
-自动完成：系统依赖（aria2、ffmpeg、解压工具、cron、python3）→ Node.js 20 → rclone → 克隆代码到 `/opt/magnet-flow` → npm 安装 → 生成随机密钥 → 写入调优后的 aria2 配置（含每日 tracker 自动更新）→ 配置并启动 systemd 服务（`aria2` / `magnetflow` / `rclone-rcd`）→ 磁盘守护 / 备份 / 日志轮转 / BBR。
+自动完成：系统依赖（aria2、Transmission、ffmpeg、解压工具、cron、python3）→ Node.js 20 → rclone → 克隆代码到 `/opt/magnet-flow` → npm 安装 → 生成随机密钥 → 写入调优后的 aria2 配置（含每日 tracker 自动更新）与 Transmission 配置 → 配置并启动 systemd 服务（`aria2` / `transmission` / `magnetflow` / `rclone-rcd`）→ 磁盘守护 / 备份 / 日志轮转 / BBR。
 
 完成后访问 `http://<服务器IP>:3000`，**初始管理员密码会在安装结束时打印一次**，请登录后立即修改。
 
@@ -118,6 +119,7 @@ systemctl restart rclone-rcd
 | `DOWNLOAD_DIR` | 下载目录 | `<安装目录>/downloads` |
 | `ARIA2_RPC_URL` / `ARIA2_SECRET` | aria2 RPC 地址 / 密钥 | 本地 / 随机生成 |
 | `RCLONE_RC_URL` | rclone rc 地址 | `http://127.0.0.1:5572` |
+| `TRANSMISSION_RPC_URL` | Transmission RPC 地址（第二下载引擎，不通则自动隐藏并回退 aria2） | `http://127.0.0.1:9091/transmission/rpc` |
 | `AUTO_CLEAR_COMPLETED` / `AUTO_CLEAR_DELAY_SEC` | 完成后自动清理记录 / 保留秒数 | `true` / `15` |
 | `AUTO_UPLOAD_REMOTE` / `AUTO_UPLOAD_DEST` | 自动上传网盘 / 目标文件夹（也可在网页设置） | 空 |
 | `NOTIFY_TELEGRAM_BOT_TOKEN` / `NOTIFY_TELEGRAM_CHAT_ID` / `NOTIFY_BARK_URL` | 完成通知（也可在网页设置） | 空 |
