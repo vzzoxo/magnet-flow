@@ -536,6 +536,22 @@
     document.getElementById('app').classList.remove('hidden');
     navigate(window.location.hash || '#dashboard');
     connectWebSocket();
+    loadDiskUsage();
+    if (!diskTimer) diskTimer = setInterval(loadDiskUsage, 60000);
+  }
+
+  let diskTimer = null;
+  async function loadDiskUsage() {
+    const el = document.getElementById('disk-widget');
+    if (!el) return;
+    try {
+      const d = await API.getDiskUsage();
+      if (!d || !d.total) { el.innerHTML = ''; return; }
+      const pct = Math.min(100, Math.round((d.used / d.total) * 100));
+      el.innerHTML = `<div class="disk-bar"><div class="disk-fill${pct >= 90 ? ' warn' : ''}" style="width:${pct}%"></div></div>
+        <div class="disk-text"><span>磁盘 ${pct}%</span><span>剩 ${formatBytes(d.free)}</span></div>`;
+      el.title = `已用 ${formatBytes(d.used)} / 共 ${formatBytes(d.total)}，剩余 ${formatBytes(d.free)}`;
+    } catch { /* ignore */ }
   }
 
   function bindLoginForm() {

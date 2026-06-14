@@ -158,6 +158,9 @@ window.API = (function () {
     getSystemInfo() {
       return api.request('/api/system/info');
     },
+    getDiskUsage() {
+      return api.request('/api/system/disk');
+    },
 
     /* ── Settings ──────────────────────────────────────── */
     getSettings() { return api.request('/api/settings'); },
