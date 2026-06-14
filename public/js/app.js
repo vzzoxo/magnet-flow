@@ -183,11 +183,17 @@
 
   function addDownloadModal() {
     const body = `
-      <div class="form-group" style="margin-bottom:0">
+      <div class="form-group">
         <label class="form-label" for="download-url-input">磁力链接 / 下载链接</label>
         <input type="text" id="download-url-input" class="form-input"
                placeholder="magnet:? / http(s):// / 或 40位 BT Hash" autofocus>
         <p class="form-hint">支持磁力链接、HTTP/HTTPS、纯 Hash 和 torrent 链接</p>
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">或 上传种子文件</label>
+        <input type="file" id="torrent-file" accept=".torrent,application/x-bittorrent" style="display:none">
+        <button type="button" class="btn-secondary" id="btn-pick-torrent" style="width:100%">📄 选择 .torrent 文件</button>
+        <p class="form-hint" id="torrent-hint">选择后立即开始下载</p>
       </div>
     `;
     const footer = `
@@ -195,6 +201,32 @@
       <button class="btn-primary" id="btn-confirm-download">开始下载</button>
     `;
     showModal('添加下载', body, footer);
+
+    // .torrent file upload
+    const fileInput = document.getElementById('torrent-file');
+    document.getElementById('btn-pick-torrent').onclick = () => fileInput.click();
+    fileInput.onchange = async () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      const hint = document.getElementById('torrent-hint');
+      hint.textContent = '正在上传 ' + file.name + ' …';
+      try {
+        const b64 = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result).split(',')[1]);
+          r.onerror = reject;
+          r.readAsDataURL(file);
+        });
+        await API.addTorrent(b64);
+        showToast('种子已添加', 'success');
+        hideModal();
+        if (currentPage === 'dashboard') refreshDownloads();
+      } catch (err) {
+        hint.textContent = '选择后立即开始下载';
+        fileInput.value = '';
+        showToast('种子添加失败: ' + err.message, 'error');
+      }
+    };
 
     document.getElementById('btn-confirm-download').onclick = async () => {
       const url = document.getElementById('download-url-input').value.trim();

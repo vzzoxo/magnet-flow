@@ -59,6 +59,25 @@ router.post('/add', async (req, res) => {
 });
 
 /**
+ * POST /add-torrent
+ * Add a download from an uploaded .torrent file (base64 in JSON body).
+ */
+router.post('/add-torrent', express.json({ limit: '25mb' }), async (req, res) => {
+  try {
+    const { torrent } = req.body;
+    if (!torrent || typeof torrent !== 'string') {
+      return res.status(400).json({ error: '缺少种子文件内容' });
+    }
+    const gid = await aria2.addTorrent(torrent, { dir: DOWNLOAD_DIR });
+    console.log(`[MagnetFlow] Torrent added: gid=${gid}`);
+    res.json({ gid });
+  } catch (err) {
+    console.error('[MagnetFlow] Add torrent error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /list
  * List all downloads (active, waiting, stopped) with global stats.
  */

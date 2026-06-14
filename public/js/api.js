@@ -81,6 +81,13 @@ window.API = (function () {
       });
     },
 
+    addTorrent(torrentBase64) {
+      return api.request('/api/downloads/add-torrent', {
+        method: 'POST',
+        body: JSON.stringify({ torrent: torrentBase64 }),
+      });
+    },
+
     listDownloads() {
       return api.request('/api/downloads/list');
     },
