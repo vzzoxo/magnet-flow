@@ -427,7 +427,9 @@
       return;
     }
 
-    const options = remotes.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+    let def = '';
+    try { const c = await API.getSettings(); def = (c && c.defaultRemote) || ''; } catch (e) { /* ignore */ }
+    const options = remotes.map((r) => `<option value="${escapeHtml(r)}"${r === def ? ' selected' : ''}>${escapeHtml(r)}</option>`).join('');
     const body = `
       <div class="form-group">
         <label class="form-label" for="upload-remote">目标网盘</label>
@@ -1821,6 +1823,20 @@
       </div>
 
       <div class="settings-section">
+        <h2 class="settings-section-title">手动上传默认网盘</h2>
+        <div class="settings-card">
+          <form id="defremote-form">
+            <div class="form-group">
+              <label class="form-label" for="def-remote">默认网盘</label>
+              <select id="def-remote" class="form-select"></select>
+              <p class="form-hint">「文件管理 → 上传到网盘」弹窗会默认选中此网盘（仍可临时更换）。留空＝不预选。</p>
+            </div>
+            <button type="submit" class="btn-primary">保存</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="settings-section">
         <h2 class="settings-section-title">完成通知</h2>
         <div class="settings-card">
           <form id="notify-form">
@@ -1898,6 +1914,18 @@
       try {
         await API.saveSettings({ autoUpload: { enabled, remote, dest } });
         showToast('自动上传设置已保存', 'success');
+      } catch (err) { showToast('保存失败: ' + err.message, 'error'); }
+    });
+
+    // Default remote for manual uploads
+    const defRemote = document.getElementById('def-remote');
+    defRemote.innerHTML = '<option value="">（不预选）</option>' +
+      remotes.map((r) => `<option value="${escapeHtml(r)}"${r === cfg.defaultRemote ? ' selected' : ''}>${escapeHtml(r)}</option>`).join('');
+    document.getElementById('defremote-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await API.saveSettings({ defaultRemote: defRemote.value });
+        showToast('默认网盘已保存', 'success');
       } catch (err) { showToast('保存失败: ' + err.message, 'error'); }
     });
 
