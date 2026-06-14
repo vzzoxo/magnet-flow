@@ -74,18 +74,22 @@ window.API = (function () {
     },
 
     /* ── Downloads ─────────────────────────────────────── */
-    addDownload(url) {
+    addDownload(url, engine) {
       return api.request('/api/downloads/add', {
         method: 'POST',
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, engine }),
       });
     },
 
-    addTorrent(torrentBase64) {
+    addTorrent(torrentBase64, engine) {
       return api.request('/api/downloads/add-torrent', {
         method: 'POST',
-        body: JSON.stringify({ torrent: torrentBase64 }),
+        body: JSON.stringify({ torrent: torrentBase64, engine }),
       });
+    },
+
+    listEngines() {
+      return api.request('/api/downloads/engines');
     },
 
     listDownloads() {
@@ -93,15 +97,15 @@ window.API = (function () {
     },
 
     pauseDownload(gid) {
-      return api.request('/api/downloads/pause/' + gid, { method: 'POST' });
+      return api.request('/api/downloads/pause/' + encodeURIComponent(gid), { method: 'POST' });
     },
 
     resumeDownload(gid) {
-      return api.request('/api/downloads/resume/' + gid, { method: 'POST' });
+      return api.request('/api/downloads/resume/' + encodeURIComponent(gid), { method: 'POST' });
     },
 
     removeDownload(gid) {
-      return api.request('/api/downloads/' + gid, { method: 'DELETE' });
+      return api.request('/api/downloads/' + encodeURIComponent(gid), { method: 'DELETE' });
     },
 
     purgeDownloads() {
@@ -109,11 +113,11 @@ window.API = (function () {
     },
 
     getDownloadFiles(gid) {
-      return api.request('/api/downloads/files/' + gid);
+      return api.request('/api/downloads/files/' + encodeURIComponent(gid));
     },
 
     selectDownloadFiles(gid, indexes) {
-      return api.request('/api/downloads/select/' + gid, {
+      return api.request('/api/downloads/select/' + encodeURIComponent(gid), {
         method: 'POST',
         body: JSON.stringify({ indexes }),
       });

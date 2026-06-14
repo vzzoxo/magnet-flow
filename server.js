@@ -28,6 +28,7 @@ const { notify, notifyEnabled } = require('./lib/notify');
 const { startUpload } = require('./lib/uploader');
 const settings = require('./lib/settings');
 const rss = require('./lib/rss');
+const engines = require('./lib/engines');
 
 // Fail fast if the JWT secret is missing or left at the insecure default.
 assertSecretConfigured();
@@ -252,7 +253,7 @@ async function autoClearCompleted(stopped) {
 
     if (now - firstSeen >= delayMs) {
       try {
-        await aria2.removeDownloadResult(dl.gid);
+        await engines.removeCompletedRecord(dl.gid);
         completedFirstSeen.delete(dl.gid);
         console.log(`[MagnetFlow] Auto-cleared completed record (files kept): gid=${dl.gid}`);
       } catch {
@@ -277,24 +278,15 @@ function startPolling() {
     if (!needBroadcast && !AUTO_CLEAR_COMPLETED && !hooksActive) return;
 
     try {
-      const [active, waiting, stopped, stats] = await Promise.all([
-        aria2.tellActive(),
-        aria2.tellWaiting(0, 100),
-        aria2.tellStopped(0, 100),
-        aria2.getGlobalStat(),
-      ]);
-
-      await handleCompletions(stopped);
-      await autoClearCompleted(stopped);
+      const data = await engines.collectDownloads();
+      await handleCompletions(data.stopped);
+      await autoClearCompleted(data.stopped);
 
       if (needBroadcast) {
-        broadcast({
-          type: 'downloads',
-          data: { active, waiting, stopped, stats },
-        });
+        broadcast({ type: 'downloads', data });
       }
     } catch {
-      // aria2 might not be running — silently ignore
+      // engine might not be running — silently ignore
     }
   }, 2000);
 

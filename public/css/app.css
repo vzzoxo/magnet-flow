@@ -359,6 +359,9 @@ img { display: block; }
 .download-stat span { margin-right: 4px; }
 .download-stat strong { color: var(--text-secondary); font-weight: 600; }
 .download-percentage { font-weight: 700; font-size: 0.95rem; color: var(--primary); }
+.engine-tag { font-size: 0.66rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; letter-spacing: 0.02em; }
+.engine-aria2 { color: var(--primary); background: var(--info-bg); }
+.engine-tr { color: var(--accent); background: rgba(191, 90, 242, 0.14); }
 
 /* ── Badges ─────────────────────────────────────────────────────────────── */
 .badge { display: inline-flex; align-items: center; padding: 4px 11px; font-size: 0.74rem; font-weight: 600; border-radius: 999px; white-space: nowrap; }

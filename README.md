@@ -21,6 +21,7 @@
 
 **下载**
 - 🧲 粘贴磁力链接 / 种子 / HTTP(S) / 纯 BT InfoHash 即可下载，基于 aria2。
+- 🔀 **双下载引擎**：磁力/种子可选 **aria2** 或 **Transmission**（HTTP 直链始终用 aria2），任务卡带引擎标签。
 - 📊 实时进度、速度、连接数与**做种数**（一眼判断是否「死种」）。
 - 📂 多文件种子可**勾选只下需要的文件**。
 - 🧹 下载完成后自动清理任务记录（文件保留），列表清爽。
@@ -129,6 +130,7 @@ systemctl restart rclone-rcd
 ```bash
 systemctl status  magnetflow      # 应用            journalctl -u magnetflow -f
 systemctl status  aria2           # 下载引擎
+systemctl status  transmission    # 第二下载引擎(可选)
 systemctl status  rclone-rcd      # 网盘守护进程
 systemctl status  caddy           # 反向代理(若装)
 ```

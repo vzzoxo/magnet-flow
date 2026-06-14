@@ -36,7 +36,7 @@ echo
 c_info "安装系统依赖…"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq curl ca-certificates git aria2 ffmpeg unzip p7zip-full cron python3 >/dev/null
+apt-get install -y -qq curl ca-certificates git aria2 ffmpeg unzip p7zip-full cron python3 transmission-daemon >/dev/null
 # unrar 在部分源里需要 non-free，失败不阻断
 apt-get install -y -qq unrar >/dev/null 2>&1 || apt-get install -y -qq unrar-free >/dev/null 2>&1 || c_warn "unrar 未安装（.rar 解压将不可用）"
 c_ok "系统依赖就绪"
@@ -96,6 +96,7 @@ DOWNLOAD_DIR=${DOWNLOAD_DIR}
 ARIA2_RPC_URL=http://localhost:6800/jsonrpc
 ARIA2_SECRET=${ARIA2_SECRET}
 RCLONE_RC_URL=http://127.0.0.1:5572
+TRANSMISSION_RPC_URL=http://127.0.0.1:9091/transmission/rpc
 AUTO_CLEAR_COMPLETED=true
 AUTO_CLEAR_DELAY_SEC=15
 AUTO_UPLOAD_REMOTE=
@@ -166,6 +167,34 @@ bt-tracker=${BT_TRACKERS}
 EOF
 c_ok "aria2 配置就绪"
 
+# ── 7b. Transmission 配置(第二下载引擎) ─────────────────────────────────────
+TR_CONF_DIR="/root/.config/transmission-daemon"
+systemctl stop transmission-daemon 2>/dev/null || true
+systemctl disable transmission-daemon >/dev/null 2>&1 || true
+mkdir -p "${TR_CONF_DIR}"
+cat > "${TR_CONF_DIR}/settings.json" <<EOF
+{
+  "rpc-enabled": true,
+  "rpc-bind-address": "127.0.0.1",
+  "rpc-port": 9091,
+  "rpc-url": "/transmission/",
+  "rpc-whitelist-enabled": true,
+  "rpc-whitelist": "127.0.0.1",
+  "rpc-authentication-required": false,
+  "download-dir": "${DOWNLOAD_DIR}",
+  "incomplete-dir-enabled": false,
+  "ratio-limit": 0,
+  "ratio-limit-enabled": true,
+  "peer-port": 51413,
+  "peer-port-random-on-start": false,
+  "dht-enabled": true,
+  "pex-enabled": true,
+  "lpd-enabled": true,
+  "encryption": 1
+}
+EOF
+c_ok "Transmission 配置就绪"
+
 # ── 8. systemd 服务 ──────────────────────────────────────────────────────────
 c_info "配置 systemd 服务…"
 NODE_BIN="$(command -v node)"
@@ -225,9 +254,29 @@ WantedBy=multi-user.target
 EOF
 fi
 
+# Transmission (second download engine) — run as root so it can write DOWNLOAD_DIR
+TR_BIN="$(command -v transmission-daemon || echo /usr/bin/transmission-daemon)"
+cat > /etc/systemd/system/transmission.service <<EOF
+[Unit]
+Description=Transmission BitTorrent Daemon (MagnetFlow)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=${TR_BIN} -f --config-dir /root/.config/transmission-daemon
+Restart=always
+RestartSec=3
+User=root
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 systemctl daemon-reload
-systemctl enable aria2 magnetflow >/dev/null 2>&1 || true
+systemctl enable aria2 magnetflow transmission >/dev/null 2>&1 || true
 systemctl restart aria2
+systemctl restart transmission 2>/dev/null || true
 [ -f /etc/systemd/system/rclone-rcd.service ] && { systemctl enable rclone-rcd >/dev/null 2>&1 || true; systemctl restart rclone-rcd; }
 systemctl restart magnetflow
 sleep 2
@@ -278,6 +327,8 @@ if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: a
   ufw allow "${PORT}/tcp" >/dev/null 2>&1 || true
   ufw allow 6881:6999/tcp >/dev/null 2>&1 || true
   ufw allow 6881:6999/udp >/dev/null 2>&1 || true
+  ufw allow 51413/tcp >/dev/null 2>&1 || true
+  ufw allow 51413/udp >/dev/null 2>&1 || true
   c_warn "已在 ufw 放行 ${PORT} 与 BT 端口 6881-6999；若使用云厂商防火墙(如 DigitalOcean Cloud Firewall)请自行放行这些端口"
 fi
 

@@ -189,6 +189,14 @@
                placeholder="magnet:? / http(s):// / 或 40位 BT Hash" autofocus>
         <p class="form-hint">支持磁力链接、HTTP/HTTPS、纯 Hash 和 torrent 链接</p>
       </div>
+      <div class="form-group" id="engine-row" style="display:none">
+        <label class="form-label" for="engine-select">下载引擎</label>
+        <select id="engine-select" class="form-select">
+          <option value="aria2">aria2（磁力 / 种子 / 直链）</option>
+          <option value="transmission">Transmission（仅 BT）</option>
+        </select>
+        <p class="form-hint">磁力/种子可选引擎；HTTP/HTTPS 直链始终用 aria2。</p>
+      </div>
       <div class="form-group" style="margin-bottom:0">
         <label class="form-label">或 上传种子文件</label>
         <input type="file" id="torrent-file" accept=".torrent,application/x-bittorrent" style="display:none">
@@ -201,6 +209,17 @@
       <button class="btn-primary" id="btn-confirm-download">开始下载</button>
     `;
     showModal('添加下载', body, footer);
+
+    const currentEngine = () => {
+      const el = document.getElementById('engine-select');
+      return el ? el.value : 'aria2';
+    };
+    // Show the engine selector only when Transmission is available.
+    API.listEngines().then((r) => {
+      if (r && r.engines && r.engines.includes('transmission')) {
+        document.getElementById('engine-row').style.display = '';
+      }
+    }).catch(() => {});
 
     // .torrent file upload
     const fileInput = document.getElementById('torrent-file');
@@ -217,7 +236,7 @@
           r.onerror = reject;
           r.readAsDataURL(file);
         });
-        await API.addTorrent(b64);
+        await API.addTorrent(b64, currentEngine());
         showToast('种子已添加', 'success');
         hideModal();
         if (currentPage === 'dashboard') refreshDownloads();
@@ -232,7 +251,7 @@
       const url = document.getElementById('download-url-input').value.trim();
       if (!url) { showToast('请输入下载链接', 'warning'); return; }
       try {
-        await API.addDownload(url);
+        await API.addDownload(url, currentEngine());
         showToast('下载已添加', 'success');
         hideModal();
         if (currentPage === 'dashboard') refreshDownloads();
@@ -843,7 +862,8 @@
     return `<span class="download-stat"><span>进度</span> <strong>${formatBytes(v.completedLength)} / ${formatBytes(v.totalLength)}</strong></span>${v.isActive ? `<span class="download-stat"><span>速度</span> <strong>${formatSpeed(v.speed)}</strong></span>` : ''}${v.isActive ? `<span class="download-stat"><span>连接</span> <strong>${Number(dl.connections) || 0}</strong></span>` : ''}${(v.isActive && dl.bittorrent) ? `<span class="download-stat"><span>做种</span> <strong class="${(Number(dl.numSeeders) || 0) > 0 ? 'text-success' : 'text-danger'}">${dl.numSeeders != null ? dl.numSeeders : '?'}</strong></span>` : ''}`;
   }
   function dlMetaRightHtml(dl, v) {
-    return `<span class="download-percentage">${v.percent}%</span>${getStatusBadge(v.status)}`;
+    const eng = dl.engine === 'tr' ? 'TR' : 'aria2';
+    return `<span class="engine-tag engine-${dl.engine === 'tr' ? 'tr' : 'aria2'}">${eng}</span><span class="download-percentage">${v.percent}%</span>${getStatusBadge(v.status)}`;
   }
 
   function renderDownloadCard(dl) {
