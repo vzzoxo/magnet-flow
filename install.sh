@@ -185,12 +185,21 @@ cat > "${TR_CONF_DIR}/settings.json" <<EOF
   "incomplete-dir-enabled": false,
   "ratio-limit": 0,
   "ratio-limit-enabled": true,
+  "idle-seeding-limit": 0,
+  "idle-seeding-limit-enabled": true,
   "peer-port": 51413,
   "peer-port-random-on-start": false,
   "dht-enabled": true,
   "pex-enabled": true,
   "lpd-enabled": true,
-  "encryption": 1
+  "utp-enabled": true,
+  "encryption": 1,
+  "download-queue-enabled": true,
+  "download-queue-size": 10,
+  "peer-limit-global": 500,
+  "peer-limit-per-torrent": 100,
+  "cache-size-mb": 64,
+  "preallocation": 1
 }
 EOF
 c_ok "Transmission 配置就绪"
