@@ -75,6 +75,8 @@ DOMAIN=dl.example.com LE_EMAIL=you@example.com bash <(curl -sL https://raw.githu
 
 ## 🌐 绑定域名 + HTTPS（推荐 Caddy，自动证书）
 
+> 一键脚本在交互时填入域名即可**自动完成下面所有步骤**（见上节）。以下为手动配置 / 原理说明，适用于已部署后再加域名的情况。
+
 1. 域名 A 记录指向服务器公网 IP，确保 80/443 可达。
 2. 让应用只监听本机：`.env` 设 `HOST=127.0.0.1`，然后 `systemctl restart magnetflow`。
 3. 安装 Caddy，写 `/etc/caddy/Caddyfile`（把 `your.domain.com` 换成你的域名）：
@@ -111,11 +113,22 @@ systemctl restart rclone-rcd
 
 连接后，网页「网盘」会自动出现对应网盘，可浏览、在线播放、删除、复制直链；文件管理里也可把**已下载完成**的文件 ☁️ 上传到网盘。
 
+> 在线播放云端视频走**服务器代理**（浏览器 ⇄ 服务器 ⇄ 网盘），凭据只留在服务器、用短时单文件令牌，安全但会占用服务器带宽。
+
+### Google Drive 额外说明
+
+`rclone config` 选 `drive` 时的关键选项：`client_id`/`client_secret` 可留空（用共享 ID）；`scope` 选 `1`（完全读写）；`Configure this as a Shared Drive (Team Drive)?` 个人盘选 `n`。
+
+- **建议自建 OAuth client_id**（避免共享 ID 限速 / “未验证”警告）：Google Cloud Console → 新建项目 → 启用 **Google Drive API**（不是 Drive Activity API）→ 配置 OAuth 同意屏幕（External，加自己为测试用户）→ 凭据里创建 **OAuth 客户端 ID**，类型选 **桌面应用**，把得到的 id/secret 填进 `rclone config`。
+- ⚠️ **7 天过期坑**：OAuth 同意屏幕若停留在「测试」状态，刷新令牌每 7 天失效一次；把发布状态点成「**生产 / In production**」即可长期有效（自用忽略未验证警告）。
+- **容量显示**：Google Workspace 池化存储经 API 返回的常是占位值（如 100 TiB），并非管理后台设定的真实额度，仅供参考。
+
 ## ⚙️ 网页设置（无需改配置）
 
 进「设置」页可直接配置并即时生效：
 - **安全**：修改密码（改后旧登录自动失效）。
 - **下载完成自动上传**：开关 + 选网盘 + 目标文件夹。
+- **手动上传默认网盘**：设一个默认网盘，文件管理的「上传到网盘」弹窗会自动预选（仍可临时更换）。
 - **完成通知**：Telegram Bot Token / Chat ID、Bark 地址。
 - **RSS 订阅**：添加/暂停/立即检查/删除，过滤词支持关键词或正则。
 
