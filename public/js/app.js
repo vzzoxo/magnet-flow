@@ -1331,18 +1331,29 @@
   function wirePipButton(btnId, videoEl) {
     const btn = document.getElementById(btnId);
     if (!btn) return;
-    if (!videoEl || !document.pictureInPictureEnabled || typeof videoEl.requestPictureInPicture !== 'function') {
-      btn.style.display = 'none';
-      return;
-    }
+    const standard = videoEl && document.pictureInPictureEnabled && typeof videoEl.requestPictureInPicture === 'function';
+    const webkit = videoEl && typeof videoEl.webkitSetPresentationMode === 'function';
+    if (!standard && !webkit) { btn.style.display = 'none'; return; }
     btn.onclick = async () => {
       try {
-        if (document.pictureInPictureElement) await document.exitPictureInPicture();
-        else await videoEl.requestPictureInPicture();
+        if (standard) {
+          if (document.pictureInPictureElement) await document.exitPictureInPicture();
+          else await videoEl.requestPictureInPicture();
+        } else {
+          // iOS Safari uses a WebKit-specific presentation-mode API.
+          const inPip = videoEl.webkitPresentationMode === 'picture-in-picture';
+          videoEl.webkitSetPresentationMode(inPip ? 'inline' : 'picture-in-picture');
+        }
       } catch (e) { showToast('画中画不可用: ' + e.message, 'warning'); }
     };
-    videoEl.addEventListener('enterpictureinpicture', () => btn.classList.add('active'));
-    videoEl.addEventListener('leavepictureinpicture', () => btn.classList.remove('active'));
+    if (standard) {
+      videoEl.addEventListener('enterpictureinpicture', () => btn.classList.add('active'));
+      videoEl.addEventListener('leavepictureinpicture', () => btn.classList.remove('active'));
+    } else {
+      videoEl.addEventListener('webkitpresentationmodechanged', () => {
+        btn.classList.toggle('active', videoEl.webkitPresentationMode === 'picture-in-picture');
+      });
+    }
   }
 
   async function renderPlayer(filePath) {
