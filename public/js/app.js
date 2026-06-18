@@ -121,6 +121,16 @@
     copy: SVG('<rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15h-.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"/>'),
     move: SVG('<path d="M12 20h9"/><path d="M16.4 3.6a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>'),
     delete: SVG('<path d="M3 6h18"/><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6"/><path d="M18.5 6 17.6 19a2 2 0 0 1-2 1.9H8.4a2 2 0 0 1-2-1.9L5.5 6"/><path d="M10 10.5v6M14 10.5v6"/>'),
+    back: SVG('<path d="M15 18l-6-6 6-6"/>'),
+    loop: SVG('<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>'),
+    refresh: SVG('<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/>'),
+    pause: SVG('<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>'),
+    play: SVG('<path d="M7 4.5v15l12-7.5z"/>'),
+    folder: SVG('<path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h3.8a1.5 1.5 0 0 1 1.2.6L11 8.5h7.5A1.5 1.5 0 0 1 20 10v8a1.5 1.5 0 0 1-1.5 1.5h-14A1.5 1.5 0 0 1 3 18Z"/>'),
+    folderPlus: SVG('<path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h3.8a1.5 1.5 0 0 1 1.2.6L11 8.5h7.5A1.5 1.5 0 0 1 20 10v8a1.5 1.5 0 0 1-1.5 1.5h-14A1.5 1.5 0 0 1 3 18Z"/><path d="M11.5 12v4M9.5 14h4"/>'),
+    clear: SVG('<path d="M3 6h12"/><path d="M3 12h9"/><path d="M3 18h7"/><path d="m15 15 6 6m0-6-6 6"/>'),
+    file: SVG('<path d="M14 3v4.5a1 1 0 0 0 1 1H19"/><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/>'),
+    add: SVG('<path d="M12 5v14M5 12h14"/>'),
   };
 
   function showToast(message, type = 'info', duration = 3500) {
@@ -200,7 +210,7 @@
       <div class="form-group" style="margin-bottom:0">
         <label class="form-label">或 上传种子文件</label>
         <input type="file" id="torrent-file" accept=".torrent,application/x-bittorrent" style="display:none">
-        <button type="button" class="btn-secondary" id="btn-pick-torrent" style="width:100%">📄 选择 .torrent 文件</button>
+        <button type="button" class="btn-secondary" id="btn-pick-torrent" style="width:100%">${ACTION_ICONS.file} 选择 .torrent 文件</button>
         <p class="form-hint" id="torrent-hint">选择后立即开始下载</p>
       </div>
     `;
@@ -742,8 +752,8 @@
       <div class="page-header">
         <h1 class="page-title">📥 下载管理</h1>
         <div class="flex gap-8">
-          <button class="btn-secondary btn-sm" id="btn-purge" title="清除已完成/已出错的任务">🧹 清理</button>
-          <button class="btn-primary" id="btn-add-download">＋ 添加下载</button>
+          <button class="btn-secondary btn-sm" id="btn-purge" title="清除已完成/已出错的任务">${ACTION_ICONS.clear} 清理</button>
+          <button class="btn-primary" id="btn-add-download">${ACTION_ICONS.add} 添加下载</button>
         </div>
       </div>
 
@@ -858,7 +868,7 @@
     return { totalLength, completedLength, percent, status, isActive, canToggle, speed: Number(dl.downloadSpeed || 0) };
   }
   function dlActionsHtml(dl, v) {
-    return `${v.canToggle ? `<button class="btn-icon" data-action="${v.isActive ? 'pause' : 'resume'}" data-gid="${dl.gid}" title="${v.isActive ? '暂停' : '继续'}">${v.isActive ? '⏸️' : '▶️'}</button>` : ''}${(dl.bittorrent && v.status !== 'complete' && v.status !== 'error') ? `<button class="btn-icon" data-action="files" data-gid="${dl.gid}" title="选择文件">📂</button>` : ''}<button class="btn-icon danger" data-action="remove" data-gid="${dl.gid}" title="删除">🗑️</button>`;
+    return `${v.canToggle ? `<button class="btn-icon" data-action="${v.isActive ? 'pause' : 'resume'}" data-gid="${dl.gid}" title="${v.isActive ? '暂停' : '继续'}">${v.isActive ? ACTION_ICONS.pause : ACTION_ICONS.play}</button>` : ''}${(dl.bittorrent && v.status !== 'complete' && v.status !== 'error') ? `<button class="btn-icon" data-action="files" data-gid="${dl.gid}" title="选择文件">${ACTION_ICONS.folder}</button>` : ''}<button class="btn-icon danger" data-action="remove" data-gid="${dl.gid}" title="删除">${ACTION_ICONS.delete}</button>`;
   }
   function dlStatsHtml(dl, v) {
     return `<span class="download-stat"><span>进度</span> <strong>${formatBytes(v.completedLength)} / ${formatBytes(v.totalLength)}</strong></span>${v.isActive ? `<span class="download-stat"><span>速度</span> <strong>${formatSpeed(v.speed)}</strong></span>` : ''}${v.isActive ? `<span class="download-stat"><span>连接</span> <strong>${Number(dl.connections) || 0}</strong></span>` : ''}${(v.isActive && dl.bittorrent) ? `<span class="download-stat"><span>做种</span> <strong class="${(Number(dl.numSeeders) || 0) > 0 ? 'text-success' : 'text-danger'}">${dl.numSeeders != null ? dl.numSeeders : '?'}</strong></span>` : ''}`;
@@ -1051,8 +1061,8 @@
       <div class="breadcrumb" id="file-breadcrumb"></div>
 
       <div class="file-toolbar" id="file-toolbar">
-        <button class="btn-primary btn-sm" id="btn-new-folder">📂 新建文件夹</button>
-        <button class="btn-secondary btn-sm" id="btn-delete-selected" disabled>🗑️ 删除选中</button>
+        <button class="btn-primary btn-sm" id="btn-new-folder">${ACTION_ICONS.folderPlus} 新建文件夹</button>
+        <button class="btn-secondary btn-sm" id="btn-delete-selected" disabled>${ACTION_ICONS.delete} 删除选中</button>
         <input type="search" id="file-search" class="form-input file-search" placeholder="🔍 搜索当前目录…">
       </div>
 
@@ -1327,9 +1337,9 @@
 
     main.innerHTML = `
       <div class="page-header flex gap-16 items-center">
-        <button class="btn-icon" id="btn-player-back" title="返回">⬅️</button>
+        <button class="btn-icon" id="btn-player-back" title="返回">${ACTION_ICONS.back}</button>
         <h1 class="page-title" style="margin:0;font-size:1.1rem">${escapeHtml(name)}</h1>
-        <button class="btn-icon" id="btn-loop" title="循环播放" style="margin-left:auto">🔁</button>
+        <button class="btn-icon" id="btn-loop" title="循环播放" style="margin-left:auto">${ACTION_ICONS.loop}</button>
       </div>
 
       ${playerHtml}
@@ -1556,7 +1566,7 @@
     content.innerHTML = `
       <div class="file-toolbar netdisk-toolbar">
         <select id="netdisk-remote" class="form-select" style="max-width:170px">${names.map((n) => `<option value="${escapeHtml(n)}"${n === remote ? ' selected' : ''}>${escapeHtml(n)}</option>`).join('')}</select>
-        <button class="btn-secondary btn-sm" id="nd-mkdir">📂 新建文件夹</button>
+        <button class="btn-secondary btn-sm" id="nd-mkdir">${ACTION_ICONS.folderPlus} 新建文件夹</button>
         <div class="view-toggle">
           <button class="vt-btn ${view === 'list' ? 'active' : ''}" data-view="list" title="列表">${FT_ICONS.list}</button>
           <button class="vt-btn ${view === 'grid' ? 'active' : ''}" data-view="grid" title="网格">${FT_ICONS.grid}</button>
@@ -1610,9 +1620,9 @@
 
     main.innerHTML = `
       <div class="page-header flex gap-16 items-center">
-        <button class="btn-icon" id="btn-net-back" title="返回">⬅️</button>
+        <button class="btn-icon" id="btn-net-back" title="返回">${ACTION_ICONS.back}</button>
         <h1 class="page-title" style="margin:0;font-size:1.1rem">${escapeHtml(name)}</h1>
-        <button class="btn-icon" id="btn-net-loop" title="循环播放" style="margin-left:auto">🔁</button>
+        <button class="btn-icon" id="btn-net-loop" title="循环播放" style="margin-left:auto">${ACTION_ICONS.loop}</button>
       </div>
       ${playerHtml}
       <div class="settings-card" style="margin-top:20px">
@@ -1665,9 +1675,9 @@
             </div>
           </div>
           <div class="flex gap-4" style="flex-shrink:0">
-            <button class="btn-icon" title="立即检查" data-rss="check" data-id="${s.id}">🔄</button>
-            <button class="btn-icon" title="${s.enabled ? '暂停' : '启用'}" data-rss="toggle" data-id="${s.id}">${s.enabled ? '⏸️' : '▶️'}</button>
-            <button class="btn-icon danger" title="删除" data-rss="delete" data-id="${s.id}" data-name="${escapeHtml(s.name)}">🗑️</button>
+            <button class="btn-icon" title="立即检查" data-rss="check" data-id="${s.id}">${ACTION_ICONS.refresh}</button>
+            <button class="btn-icon" title="${s.enabled ? '暂停' : '启用'}" data-rss="toggle" data-id="${s.id}">${s.enabled ? ACTION_ICONS.pause : ACTION_ICONS.play}</button>
+            <button class="btn-icon danger" title="删除" data-rss="delete" data-id="${s.id}" data-name="${escapeHtml(s.name)}">${ACTION_ICONS.delete}</button>
           </div>
         </div>
       </div>`).join('');
@@ -1872,7 +1882,7 @@
       <div class="settings-section">
         <h2 class="settings-section-title" style="justify-content:space-between">
           <span>RSS 订阅</span>
-          <button class="btn-primary btn-sm" id="rss-add-btn">＋ 添加</button>
+          <button class="btn-primary btn-sm" id="rss-add-btn">${ACTION_ICONS.add} 添加</button>
         </h2>
         <p class="text-muted text-xs" style="margin:-6px 0 12px">每 15 分钟自动检查；标题匹配「过滤词」（关键词或正则，留空＝全部）的新条目自动下载。</p>
         <div id="rss-list">${netEmpty('⏳', '加载中…')}</div>

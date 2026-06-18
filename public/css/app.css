@@ -280,6 +280,8 @@ img { display: block; }
 .btn-danger { color: #fff; background: linear-gradient(135deg, #ff5b51, #ff3b30); box-shadow: 0 8px 22px rgba(255, 59, 48, 0.35); }
 .btn-danger:hover { filter: brightness(1.05); transform: translateY(-1px); }
 .btn-sm { padding: 8px 14px; font-size: 0.84rem; }
+.btn-primary svg, .btn-secondary svg, .btn-danger svg { width: 16px; height: 16px; flex: 0 0 auto; }
+.btn-sm svg { width: 15px; height: 15px; }
 
 .btn-icon {
   display: inline-flex; align-items: center; justify-content: center;
