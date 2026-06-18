@@ -131,6 +131,7 @@
     clear: SVG('<path d="M3 6h12"/><path d="M3 12h9"/><path d="M3 18h7"/><path d="m15 15 6 6m0-6-6 6"/>'),
     file: SVG('<path d="M14 3v4.5a1 1 0 0 0 1 1H19"/><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/>'),
     add: SVG('<path d="M12 5v14M5 12h14"/>'),
+    pip: SVG('<rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1"/>'),
   };
 
   function showToast(message, type = 'info', duration = 3500) {
@@ -1314,6 +1315,34 @@
     };
     apply();
     btn.onclick = () => { on = !on; localStorage.setItem('playerLoop', on ? '1' : '0'); apply(); };
+    // Safeguard: if the loop attribute is missed (some browsers), force replay.
+    mediaEl.addEventListener('ended', () => {
+      if (on) { try { mediaEl.currentTime = 0; mediaEl.play().catch(() => {}); } catch {} }
+    });
+    // Resume when returning to the tab if a background policy paused it.
+    const onVis = () => {
+      if (!document.hidden && on && mediaEl.paused && !mediaEl.ended) mediaEl.play().catch(() => {});
+    };
+    document.addEventListener('visibilitychange', onVis);
+  }
+
+  // Picture-in-Picture: pops the video into a floating always-on-top window that
+  // keeps playing (and looping) even when this tab is in the background.
+  function wirePipButton(btnId, videoEl) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    if (!videoEl || !document.pictureInPictureEnabled || typeof videoEl.requestPictureInPicture !== 'function') {
+      btn.style.display = 'none';
+      return;
+    }
+    btn.onclick = async () => {
+      try {
+        if (document.pictureInPictureElement) await document.exitPictureInPicture();
+        else await videoEl.requestPictureInPicture();
+      } catch (e) { showToast('画中画不可用: ' + e.message, 'warning'); }
+    };
+    videoEl.addEventListener('enterpictureinpicture', () => btn.classList.add('active'));
+    videoEl.addEventListener('leavepictureinpicture', () => btn.classList.remove('active'));
   }
 
   async function renderPlayer(filePath) {
@@ -1339,7 +1368,8 @@
       <div class="page-header flex gap-16 items-center">
         <button class="btn-icon" id="btn-player-back" title="返回">${ACTION_ICONS.back}</button>
         <h1 class="page-title" style="margin:0;font-size:1.1rem">${escapeHtml(name)}</h1>
-        <button class="btn-icon" id="btn-loop" title="循环播放" style="margin-left:auto">${ACTION_ICONS.loop}</button>
+        <button class="btn-icon" id="btn-pip" title="画中画（后台悬浮播放）" style="margin-left:auto">${ACTION_ICONS.pip}</button>
+        <button class="btn-icon" id="btn-loop" title="循环播放">${ACTION_ICONS.loop}</button>
       </div>
 
       ${playerHtml}
@@ -1358,6 +1388,7 @@
 
     const video = document.getElementById('video-player');
     wireLoopButton('btn-loop', video);
+    wirePipButton('btn-pip', isAudio ? null : video);
     const streamUrl = await API.getStreamUrl(filePath);
 
     if (!isAudio && filePath.endsWith('.m3u8')) {
@@ -1622,7 +1653,8 @@
       <div class="page-header flex gap-16 items-center">
         <button class="btn-icon" id="btn-net-back" title="返回">${ACTION_ICONS.back}</button>
         <h1 class="page-title" style="margin:0;font-size:1.1rem">${escapeHtml(name)}</h1>
-        <button class="btn-icon" id="btn-net-loop" title="循环播放" style="margin-left:auto">${ACTION_ICONS.loop}</button>
+        <button class="btn-icon" id="btn-net-pip" title="画中画（后台悬浮播放）" style="margin-left:auto">${ACTION_ICONS.pip}</button>
+        <button class="btn-icon" id="btn-net-loop" title="循环播放">${ACTION_ICONS.loop}</button>
       </div>
       ${playerHtml}
       <div class="settings-card" style="margin-top:20px">
@@ -1637,6 +1669,7 @@
 
     const el = document.getElementById('net-media');
     wireLoopButton('btn-net-loop', el);
+    wirePipButton('btn-net-pip', kind === 'audio' ? null : el);
     const url = await API.getRemoteStreamUrl(remote, filePath);
     el.src = url;
   }
