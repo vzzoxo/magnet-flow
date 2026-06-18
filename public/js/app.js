@@ -1293,6 +1293,19 @@
      Video Player Page
      ══════════════════════════════════════════════════════ */
 
+  function wireLoopButton(btnId, mediaEl) {
+    const btn = document.getElementById(btnId);
+    if (!btn || !mediaEl) return;
+    let on = localStorage.getItem('playerLoop') === '1';
+    const apply = () => {
+      mediaEl.loop = on;
+      btn.classList.toggle('active', on);
+      btn.title = on ? '循环播放：开' : '循环播放：关';
+    };
+    apply();
+    btn.onclick = () => { on = !on; localStorage.setItem('playerLoop', on ? '1' : '0'); apply(); };
+  }
+
   async function renderPlayer(filePath) {
     const main = document.getElementById('main-content');
     const name = filePath.split('/').pop();
@@ -1316,6 +1329,7 @@
       <div class="page-header flex gap-16 items-center">
         <button class="btn-icon" id="btn-player-back" title="返回">⬅️</button>
         <h1 class="page-title" style="margin:0;font-size:1.1rem">${escapeHtml(name)}</h1>
+        <button class="btn-icon" id="btn-loop" title="循环播放" style="margin-left:auto">🔁</button>
       </div>
 
       ${playerHtml}
@@ -1333,6 +1347,7 @@
     };
 
     const video = document.getElementById('video-player');
+    wireLoopButton('btn-loop', video);
     const streamUrl = await API.getStreamUrl(filePath);
 
     if (!isAudio && filePath.endsWith('.m3u8')) {
@@ -1597,6 +1612,7 @@
       <div class="page-header flex gap-16 items-center">
         <button class="btn-icon" id="btn-net-back" title="返回">⬅️</button>
         <h1 class="page-title" style="margin:0;font-size:1.1rem">${escapeHtml(name)}</h1>
+        <button class="btn-icon" id="btn-net-loop" title="循环播放" style="margin-left:auto">🔁</button>
       </div>
       ${playerHtml}
       <div class="settings-card" style="margin-top:20px">
@@ -1610,6 +1626,7 @@
     };
 
     const el = document.getElementById('net-media');
+    wireLoopButton('btn-net-loop', el);
     const url = await API.getRemoteStreamUrl(remote, filePath);
     el.src = url;
   }

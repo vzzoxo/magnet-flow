@@ -290,6 +290,7 @@ img { display: block; }
 .btn-icon:hover { background: var(--bg-hover); color: var(--text-primary); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
 .btn-icon:active { transform: scale(0.94); }
 .btn-icon.danger:hover { color: var(--danger); background: var(--danger-bg); border-color: rgba(255, 59, 48, 0.3); }
+.btn-icon.active { color: var(--primary); background: var(--info-bg); border-color: var(--primary); }
 .btn-icon svg { width: 18px; height: 18px; display: block; }
 
 /* ── Cards (generic glass) ──────────────────────────────────────────────── */
