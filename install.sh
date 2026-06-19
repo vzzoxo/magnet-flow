@@ -324,7 +324,7 @@ if [ -n "${DOMAIN}" ]; then
   c_info "安装并配置 Caddy（自动申请 HTTPS 证书）…"
   if ! command -v caddy >/dev/null 2>&1; then
     apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https gnupg >/dev/null 2>&1 || true
-    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' 2>/dev/null | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null || true
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' 2>/dev/null | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-sign.gpg 2>/dev/null || true
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' 2>/dev/null > /etc/apt/sources.list.d/caddy-stable.list || true
     apt-get update -qq || true
     apt-get install -y -qq caddy >/dev/null 2>&1 || c_warn "Caddy 安装失败，请手动配置反向代理到 127.0.0.1:${PORT}"
@@ -415,7 +415,7 @@ if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: a
   ufw allow 6881:6999/udp >/dev/null 2>&1 || true
   ufw allow 51413/tcp >/dev/null 2>&1 || true
   ufw allow 51413/udp >/dev/null 2>&1 || true
-  c_warn "已放行 BT 端口 6881-6999 与 51413；云厂商防火墙(如 DigitalOcean)请自行放行"
+  c_warn "已放行 BT 端口 6881-6999 与 51413；云厂商防火墙请自行放行"
 fi
 
 # ── 9. 完成 ──────────────────────────────────────────────────────────────────
