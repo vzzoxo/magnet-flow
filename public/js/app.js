@@ -123,6 +123,10 @@
     delete: SVG('<path d="M3 6h18"/><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6"/><path d="M18.5 6 17.6 19a2 2 0 0 1-2 1.9H8.4a2 2 0 0 1-2-1.9L5.5 6"/><path d="M10 10.5v6M14 10.5v6"/>'),
     back: SVG('<path d="M15 18l-6-6 6-6"/>'),
     loop: SVG('<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>'),
+    loopSingle: SVG('<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/><path d="m11 10 1-1v5"/>'),
+    playModeSeq: SVG('<path d="M4 6h16M4 12h16M4 18h10M16 18l4-4-4-4"/>'),
+    prev: SVG('<path d="M19 20L9 12l10-8v16zM5 19V5"/>'),
+    next: SVG('<path d="M5 4l10 8-10 8V4zM19 5v14"/>'),
     refresh: SVG('<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/>'),
     pause: SVG('<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>'),
     play: SVG('<path d="M7 4.5v15l12-7.5z"/>'),
@@ -363,22 +367,55 @@
   }
 
   function moveFileModal(source, sourceName, onDone) {
+    const parentDir = source.split('/').slice(0, -1).join('/');
     const body = `
-      <div class="form-group" style="margin-bottom:0">
-        <label class="form-label" for="move-dest-input">目标路径</label>
-        <input type="text" id="move-dest-input" class="form-input" placeholder="输入目标路径" value="${escapeHtml(source)}" autofocus>
-        <p class="form-hint">将 <strong>${escapeHtml(sourceName)}</strong> 移动到指定路径</p>
+      <div style="display:flex; flex-direction:column; gap:20px;">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label" for="rename-input">🆕 重命名</label>
+          <div class="flex gap-8">
+            <input type="text" id="rename-input" class="form-input" style="flex:1" value="${escapeHtml(sourceName)}" autofocus>
+            <button class="btn-primary" id="btn-confirm-rename" style="white-space:nowrap">重命名</button>
+          </div>
+          <p class="form-hint">仅修改文件名，保留在当前文件夹中</p>
+        </div>
+        
+        <hr style="border:0; border-top:1px solid var(--border-color); margin:5px 0;">
+        
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label" for="move-dest-input">🚚 移动到新目录</label>
+          <div class="flex gap-8">
+            <input type="text" id="move-dest-input" class="form-input" style="flex:1" placeholder="输入目标路径" value="${escapeHtml(source)}">
+            <button class="btn-primary" id="btn-confirm-move" style="white-space:nowrap">移动</button>
+          </div>
+          <p class="form-hint">将文件/文件夹移动到新的相对路径</p>
+        </div>
       </div>
     `;
     const footer = `
-      <button class="btn-secondary" onclick="window._hideModal()">取消</button>
-      <button class="btn-primary" id="btn-confirm-move">移动</button>
+      <button class="btn-secondary" onclick="window._hideModal()" style="width:100%">取消</button>
     `;
-    showModal('移动文件', body, footer);
+    showModal('移动 / 重命名', body, footer);
+
+    document.getElementById('btn-confirm-rename').onclick = async () => {
+      const newName = document.getElementById('rename-input').value.trim();
+      if (!newName) { showToast('请输入新名称', 'warning'); return; }
+      if (newName === sourceName) { showToast('名称未发生改变', 'info'); return; }
+      
+      const dest = parentDir ? parentDir + '/' + newName : newName;
+      try {
+        await API.moveFile(source, dest);
+        showToast('重命名成功', 'success');
+        hideModal();
+        if (onDone) onDone();
+      } catch (err) {
+        showToast('重命名失败: ' + err.message, 'error');
+      }
+    };
 
     document.getElementById('btn-confirm-move').onclick = async () => {
       const dest = document.getElementById('move-dest-input').value.trim();
       if (!dest) { showToast('请输入目标路径', 'warning'); return; }
+      if (dest === source) { showToast('目标路径未发生改变', 'info'); return; }
       try {
         await API.moveFile(source, dest);
         showToast('移动成功', 'success');
@@ -753,7 +790,6 @@
       <div class="page-header">
         <h1 class="page-title">📥 下载管理</h1>
         <div class="flex gap-8">
-          <button class="btn-secondary btn-sm" id="btn-purge" title="清除已完成/已出错的任务">${ACTION_ICONS.clear} 清理</button>
           <button class="btn-primary" id="btn-add-download">${ACTION_ICONS.add} 添加下载</button>
         </div>
       </div>
@@ -791,15 +827,6 @@
     `;
 
     document.getElementById('btn-add-download').onclick = addDownloadModal;
-    document.getElementById('btn-purge').onclick = async () => {
-      try {
-        await API.purgeDownloads();
-        showToast('已清理完成的任务', 'success');
-        refreshDownloads();
-      } catch (err) {
-        showToast('清理失败: ' + err.message, 'error');
-      }
-    };
 
     await refreshDownloads();
 
@@ -1304,24 +1331,194 @@
      Video Player Page
      ══════════════════════════════════════════════════════ */
 
-  function wireLoopButton(btnId, mediaEl) {
-    const btn = document.getElementById(btnId);
-    if (!btn || !mediaEl) return;
-    let on = localStorage.getItem('playerLoop') === '1';
-    const apply = () => {
-      mediaEl.loop = on;
-      btn.classList.toggle('active', on);
-      btn.title = on ? '循环播放：开' : '循环播放：关';
+  async function wirePlayControls({ mediaEl, isRemote, remoteName, filePath, btnPrevId, btnNextId, btnModeId }) {
+    const btnPrev = document.getElementById(btnPrevId);
+    const btnNext = document.getElementById(btnNextId);
+    const btnMode = document.getElementById(btnModeId);
+    if (!mediaEl) return;
+
+    // Get current mode from localStorage
+    const getPlayMode = () => {
+      const mode = localStorage.getItem('playerPlayMode');
+      if (mode) return mode;
+      // Fallback to legacy loop mode
+      return localStorage.getItem('playerLoop') === '1' ? 'loop-single' : 'sequence';
     };
-    apply();
-    btn.onclick = () => { on = !on; localStorage.setItem('playerLoop', on ? '1' : '0'); apply(); };
-    // Safeguard: if the loop attribute is missed (some browsers), force replay.
-    mediaEl.addEventListener('ended', () => {
-      if (on) { try { mediaEl.currentTime = 0; mediaEl.play().catch(() => {}); } catch {} }
+
+    const setPlayMode = (mode) => {
+      localStorage.setItem('playerPlayMode', mode);
+      localStorage.setItem('playerLoop', mode === 'loop-single' ? '1' : '0');
+    };
+
+    // Update button visual state
+    const updateModeUI = () => {
+      if (!btnMode) return;
+      const mode = getPlayMode();
+      if (mode === 'sequence') {
+        btnMode.innerHTML = ACTION_ICONS.playModeSeq;
+        btnMode.classList.remove('active');
+        btnMode.title = '播放模式：列表顺序';
+        mediaEl.loop = false;
+      } else if (mode === 'loop-single') {
+        btnMode.innerHTML = ACTION_ICONS.loopSingle;
+        btnMode.classList.add('active');
+        btnMode.title = '播放模式：单片循环';
+        mediaEl.loop = true;
+      } else if (mode === 'loop-list') {
+        btnMode.innerHTML = ACTION_ICONS.loop;
+        btnMode.classList.add('active');
+        btnMode.title = '播放模式：列表循环';
+        mediaEl.loop = false;
+      }
+    };
+
+    // Toggle mode on click
+    if (btnMode) {
+      btnMode.onclick = () => {
+        const currentMode = getPlayMode();
+        let nextMode = 'sequence';
+        if (currentMode === 'sequence') nextMode = 'loop-single';
+        else if (currentMode === 'loop-single') nextMode = 'loop-list';
+        else if (currentMode === 'loop-list') nextMode = 'sequence';
+        setPlayMode(nextMode);
+        updateModeUI();
+      };
+    }
+
+    // Initialize mode UI
+    updateModeUI();
+
+    // Fetch sibling media files
+    let mediaPaths = [];
+    let currentIndex = -1;
+    const parentDir = filePath.split('/').slice(0, -1).join('/');
+
+    try {
+      let items = [];
+      if (isRemote) {
+        const res = await API.browseRemote(remoteName, parentDir);
+        items = (res && res.items) || [];
+      } else {
+        const res = await API.listFiles(parentDir);
+        items = (res && res.items) || [];
+      }
+
+      mediaPaths = items
+        .filter(f => {
+          const isDir = (typeof f.isDirectory === 'boolean' ? f.isDirectory : f.isDir) === true;
+          return !isDir && (isVideoFile(f.name) || isAudioFile(f.name));
+        })
+        .map(f => isRemote ? f.path : f.relativePath);
+
+      currentIndex = mediaPaths.indexOf(filePath);
+    } catch (err) {
+      console.error('[MagnetFlow] Failed to load playlist:', err);
+    }
+
+    // Enable/disable navigation buttons based on availability
+    const updateNavButtons = () => {
+      if (mediaPaths.length <= 1) {
+        if (btnPrev) btnPrev.style.display = 'none';
+        if (btnNext) btnNext.style.display = 'none';
+        return;
+      }
+      if (btnPrev) btnPrev.style.display = '';
+      if (btnNext) btnNext.style.display = '';
+    };
+    updateNavButtons();
+
+    const navigateTo = (path) => {
+      if (isRemote) {
+        window.location.hash = '#netplay/' + encodeURIComponent(remoteName) + '/' + encodeURIComponent(path);
+      } else {
+        window.location.hash = '#player/' + encodeURIComponent(path);
+      }
+    };
+
+    const playNext = () => {
+      if (mediaPaths.length === 0) return;
+      const mode = getPlayMode();
+      if (currentIndex !== -1 && currentIndex < mediaPaths.length - 1) {
+        navigateTo(mediaPaths[currentIndex + 1]);
+      } else if (mode === 'loop-list') {
+        navigateTo(mediaPaths[0]);
+      } else {
+        showToast('已经是最后一个文件了', 'info');
+      }
+    };
+
+    const playPrev = () => {
+      if (mediaPaths.length === 0) return;
+      const mode = getPlayMode();
+      if (currentIndex > 0) {
+        navigateTo(mediaPaths[currentIndex - 1]);
+      } else if (mode === 'loop-list') {
+        navigateTo(mediaPaths[mediaPaths.length - 1]);
+      } else {
+        showToast('已经是第一个文件了', 'info');
+      }
+    };
+
+    if (btnPrev) btnPrev.onclick = playPrev;
+    if (btnNext) btnNext.onclick = playNext;
+
+    // Handle video ended event
+    mediaEl.addEventListener('ended', async () => {
+      const mode = getPlayMode();
+      if (mode === 'loop-single') {
+        // Safe loop: refresh stream token before playing again to avoid 401 expiration
+        try {
+          const freshUrl = isRemote 
+            ? await API.getRemoteStreamUrl(remoteName, filePath)
+            : await API.getStreamUrl(filePath);
+          mediaEl.src = freshUrl;
+          mediaEl.load();
+          mediaEl.play().catch(() => {});
+        } catch (e) {
+          mediaEl.currentTime = 0;
+          mediaEl.play().catch(() => {});
+        }
+      } else if (mode === 'sequence') {
+        if (currentIndex !== -1 && currentIndex < mediaPaths.length - 1) {
+          playNext();
+        }
+      } else if (mode === 'loop-list') {
+        playNext();
+      }
     });
-    // Resume when returning to the tab if a background policy paused it.
+
+    // Auto-recovery / refresh token when encountering source errors (due to token expiry)
+    mediaEl.addEventListener('error', async () => {
+      const err = mediaEl.error;
+      // Code 2: NETWORK, Code 4: SRC_NOT_SUPPORTED (returned for auth failure / expired URL)
+      if (err && (err.code === 2 || err.code === 4)) {
+        const currentTime = mediaEl.currentTime;
+        console.log('[MagnetFlow] Expired token or network error detected. Refreshing source token...');
+        try {
+          const freshUrl = isRemote 
+            ? await API.getRemoteStreamUrl(remoteName, filePath)
+            : await API.getStreamUrl(filePath);
+          
+          mediaEl.src = freshUrl;
+          mediaEl.load();
+          
+          const onLoaded = () => {
+            mediaEl.currentTime = currentTime;
+            mediaEl.play().catch(() => {});
+            mediaEl.removeEventListener('loadedmetadata', onLoaded);
+          };
+          mediaEl.addEventListener('loadedmetadata', onLoaded);
+        } catch (e) {
+          console.error('[MagnetFlow] Failed to auto-refresh stream token:', e);
+        }
+      }
+    });
+
+    // Resume when returning to the tab if background policy paused it
     const onVis = () => {
-      if (!document.hidden && on && mediaEl.paused && !mediaEl.ended) mediaEl.play().catch(() => {});
+      if (!document.hidden && getPlayMode() === 'loop-single' && mediaEl.paused && !mediaEl.ended) {
+        mediaEl.play().catch(() => {});
+      }
     };
     document.addEventListener('visibilitychange', onVis);
   }
@@ -1378,9 +1575,13 @@
     main.innerHTML = `
       <div class="page-header flex gap-16 items-center">
         <button class="btn-icon" id="btn-player-back" title="返回">${ACTION_ICONS.back}</button>
-        <h1 class="page-title" style="margin:0;font-size:1.1rem">${escapeHtml(name)}</h1>
-        <button class="btn-icon" id="btn-pip" title="画中画（后台悬浮播放）" style="margin-left:auto">${ACTION_ICONS.pip}</button>
-        <button class="btn-icon" id="btn-loop" title="循环播放">${ACTION_ICONS.loop}</button>
+        <h1 class="page-title" style="margin:0;font-size:1.1rem;word-break:break-all">${escapeHtml(name)}</h1>
+        <div class="flex gap-8 items-center" style="margin-left:auto;flex-shrink:0">
+          <button class="btn-icon" id="btn-player-prev" title="上一个">${ACTION_ICONS.prev}</button>
+          <button class="btn-icon" id="btn-player-next" title="下一个">${ACTION_ICONS.next}</button>
+          <button class="btn-icon" id="btn-pip" title="画中画（后台悬浮播放）">${ACTION_ICONS.pip}</button>
+          <button class="btn-icon" id="btn-loop" title="播放模式">${ACTION_ICONS.loop}</button>
+        </div>
       </div>
 
       ${playerHtml}
@@ -1398,8 +1599,17 @@
     };
 
     const video = document.getElementById('video-player');
-    wireLoopButton('btn-loop', video);
     wirePipButton('btn-pip', isAudio ? null : video);
+    wirePlayControls({
+      mediaEl: video,
+      isRemote: false,
+      remoteName: '',
+      filePath: filePath,
+      btnPrevId: 'btn-player-prev',
+      btnNextId: 'btn-player-next',
+      btnModeId: 'btn-loop'
+    });
+
     const streamUrl = await API.getStreamUrl(filePath);
 
     if (!isAudio && filePath.endsWith('.m3u8')) {
@@ -1663,9 +1873,13 @@
     main.innerHTML = `
       <div class="page-header flex gap-16 items-center">
         <button class="btn-icon" id="btn-net-back" title="返回">${ACTION_ICONS.back}</button>
-        <h1 class="page-title" style="margin:0;font-size:1.1rem">${escapeHtml(name)}</h1>
-        <button class="btn-icon" id="btn-net-pip" title="画中画（后台悬浮播放）" style="margin-left:auto">${ACTION_ICONS.pip}</button>
-        <button class="btn-icon" id="btn-net-loop" title="循环播放">${ACTION_ICONS.loop}</button>
+        <h1 class="page-title" style="margin:0;font-size:1.1rem;word-break:break-all">${escapeHtml(name)}</h1>
+        <div class="flex gap-8 items-center" style="margin-left:auto;flex-shrink:0">
+          <button class="btn-icon" id="btn-net-prev" title="上一个">${ACTION_ICONS.prev}</button>
+          <button class="btn-icon" id="btn-net-next" title="下一个">${ACTION_ICONS.next}</button>
+          <button class="btn-icon" id="btn-net-pip" title="画中画（后台悬浮播放）">${ACTION_ICONS.pip}</button>
+          <button class="btn-icon" id="btn-net-loop" title="播放模式">${ACTION_ICONS.loop}</button>
+        </div>
       </div>
       ${playerHtml}
       <div class="settings-card" style="margin-top:20px">
@@ -1679,8 +1893,17 @@
     };
 
     const el = document.getElementById('net-media');
-    wireLoopButton('btn-net-loop', el);
     wirePipButton('btn-net-pip', kind === 'audio' ? null : el);
+    wirePlayControls({
+      mediaEl: el,
+      isRemote: true,
+      remoteName: remote,
+      filePath: filePath,
+      btnPrevId: 'btn-net-prev',
+      btnNextId: 'btn-net-next',
+      btnModeId: 'btn-net-loop'
+    });
+
     const url = await API.getRemoteStreamUrl(remote, filePath);
     el.src = url;
   }
