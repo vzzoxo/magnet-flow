@@ -1196,12 +1196,13 @@
             const icon = getFileIcon(f.name, f.isDir);
             const sizeStr = f.isDir ? '--' : formatBytes(f.size);
             const dateStr = formatDate(f.modified);
+            const dlBadge = f.isDownloading ? '<span class="badge badge-active" style="margin-left: 8px; font-size: 0.75rem; padding: 2px 6px; vertical-align: middle;">下载中</span>' : '';
             
             return `
               <tr class="file-row" data-path="${pathStr}" data-name="${nameStr}" data-isdir="${f.isDir}">
                 <td onclick="event.stopPropagation()"><input type="checkbox" class="file-cb" value="${pathStr}"></td>
                 <td class="text-center">${icon}</td>
-                <td class="file-name-cell" title="${nameStr}"><span class="fname">${nameStr}</span></td>
+                <td class="file-name-cell" title="${nameStr}"><span class="fname" style="vertical-align: middle;">${nameStr}</span>${dlBadge}</td>
                 <td class="text-muted">${sizeStr}</td>
                 <td class="text-muted col-date">${dateStr}</td>
                 <td onclick="event.stopPropagation()">

@@ -10,6 +10,7 @@ const { resolveSafePath, isAccessDenied } = require('../lib/paths');
 const { DOWNLOAD_DIR } = require('../lib/config');
 
 const execFileAsync = promisify(execFile);
+const engines = require('../lib/engines');
 const router = express.Router();
 
 // All file routes require authentication
@@ -80,12 +81,35 @@ router.get('/list', async (req, res) => {
     // path outside DOWNLOAD_DIR is rejected, one inside is accepted.
     const dirPath = resolveSafePath(requestedPath, DOWNLOAD_DIR);
 
-    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    const allEntries = await fs.readdir(dirPath, { withFileTypes: true });
+    // Hide .aria2 control files from the file manager view
+    const entries = allEntries.filter(entry => !entry.name.endsWith('.aria2'));
+
+    // Fetch the names of files/folders currently associated with active or incomplete downloads
+    const activeDownloadNames = new Set();
+    try {
+      const dlList = await engines.collectDownloads();
+      const allTasks = [
+        ...(dlList.active || []),
+        ...(dlList.waiting || []),
+        ...(dlList.stopped || []).filter(t => t.status !== 'complete' && t.status !== 'removed')
+      ];
+      for (const t of allTasks) {
+        const name = t.bittorrent?.info?.name || t.name;
+        if (name) activeDownloadNames.add(name);
+      }
+    } catch (e) {
+      console.error('[MagnetFlow] Failed to collect active download names for files list:', e.message);
+    }
+
     const items = await Promise.all(
       entries.map(async (entry) => {
         const fullPath = path.join(dirPath, entry.name);
         const relativePath = path.relative(DOWNLOAD_DIR, fullPath);
         const isDirectory = entry.isDirectory();
+        
+        // A file is downloading if its companion .aria2 file exists, or it is in the active task list
+        const isDownloading = allEntries.some(e => e.name === entry.name + '.aria2') || activeDownloadNames.has(entry.name);
 
         try {
           const stat = await fs.stat(fullPath);
@@ -97,6 +121,7 @@ router.get('/list', async (req, res) => {
             size: isDirectory ? 0 : stat.size,
             modified: stat.mtime.toISOString(),
             extension: isDirectory ? '' : path.extname(entry.name).toLowerCase(),
+            isDownloading,
           };
         } catch {
           return {
@@ -107,6 +132,7 @@ router.get('/list', async (req, res) => {
             size: 0,
             modified: new Date().toISOString(),
             extension: isDirectory ? '' : path.extname(entry.name).toLowerCase(),
+            isDownloading,
           };
         }
       })
