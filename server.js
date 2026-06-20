@@ -270,7 +270,7 @@ async function autoClearCompleted(stopped) {
 }
 
 function startPolling() {
-  pollingInterval = setInterval(async () => {
+  const poll = async () => {
     const needBroadcast = authenticatedClients.size > 0;
     // Keep polling for auto-clear / completion hooks even when nobody watches.
     const au = settings.getAutoUpload();
@@ -288,7 +288,12 @@ function startPolling() {
     } catch {
       // engine might not be running — silently ignore
     }
-  }, 2000);
+  };
+
+  // Poll immediately on startup to populate cache
+  poll();
+
+  pollingInterval = setInterval(poll, 2000);
 
   const clearMsg = AUTO_CLEAR_COMPLETED
     ? `auto-clear completed records after ${AUTO_CLEAR_DELAY_SEC}s (files kept)`

@@ -85,40 +85,8 @@ router.get('/list', async (req, res) => {
     // Hide .aria2 control files from the file manager view
     const entries = allEntries.filter(entry => !entry.name.endsWith('.aria2'));
 
-    // Fetch the names of files/folders currently associated with active or incomplete downloads
-    const activeDownloadNames = new Set();
-    try {
-      const dlList = await engines.collectDownloads();
-      const allTasks = [
-        ...(dlList.active || []),
-        ...(dlList.waiting || []),
-        ...(dlList.stopped || []).filter(t => t.status !== 'complete' && t.status !== 'removed')
-      ];
-      for (const t of allTasks) {
-        const name = t.bittorrent?.info?.name || t.name;
-        if (name) activeDownloadNames.add(name);
-
-        if (t.files) {
-          for (const f of t.files) {
-            if (f.path) {
-              const fileBasename = path.basename(f.path);
-              activeDownloadNames.add(fileBasename);
-
-              let relPath = f.path;
-              if (path.isAbsolute(relPath)) {
-                relPath = path.relative(DOWNLOAD_DIR, relPath);
-              }
-              const firstSegment = relPath.split(path.sep)[0];
-              if (firstSegment) {
-                activeDownloadNames.add(firstSegment);
-              }
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.error('[MagnetFlow] Failed to collect active download names for files list:', e.message);
-    }
+    // Fetch the names of files/folders currently associated with active or incomplete downloads from cache
+    const activeDownloadNames = engines.getActiveDownloadNames();
 
     const items = await Promise.all(
       entries.map(async (entry) => {

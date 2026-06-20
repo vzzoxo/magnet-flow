@@ -402,18 +402,21 @@ router.get('/info', async (req, res) => {
     const names = remoteNames((await rclone.listRemotes()).remotes);
     let dump = {};
     try { dump = await rclone.configDump(); } catch { /* ignore */ }
-    const out = [];
-    for (const name of names) {
-      const type = (dump[name] && dump[name].type) || '';
-      const about = await aboutCached(name);
-      out.push({
-        name,
-        type,
-        total: about && about.total != null ? Number(about.total) : null,
-        used: about && about.used != null ? Number(about.used) : null,
-        free: about && about.free != null ? Number(about.free) : null,
-      });
-    }
+
+    const out = await Promise.all(
+      names.map(async (name) => {
+        const type = (dump[name] && dump[name].type) || '';
+        const about = await aboutCached(name);
+        return {
+          name,
+          type,
+          total: about && about.total != null ? Number(about.total) : null,
+          used: about && about.used != null ? Number(about.used) : null,
+          free: about && about.free != null ? Number(about.free) : null,
+        };
+      })
+    );
+
     res.json({ remotes: out });
   } catch (err) {
     console.error('[MagnetFlow] Remotes info error:', err.message);
