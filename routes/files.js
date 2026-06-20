@@ -97,6 +97,24 @@ router.get('/list', async (req, res) => {
       for (const t of allTasks) {
         const name = t.bittorrent?.info?.name || t.name;
         if (name) activeDownloadNames.add(name);
+
+        if (t.files) {
+          for (const f of t.files) {
+            if (f.path) {
+              const fileBasename = path.basename(f.path);
+              activeDownloadNames.add(fileBasename);
+
+              let relPath = f.path;
+              if (path.isAbsolute(relPath)) {
+                relPath = path.relative(DOWNLOAD_DIR, relPath);
+              }
+              const firstSegment = relPath.split(path.sep)[0];
+              if (firstSegment) {
+                activeDownloadNames.add(firstSegment);
+              }
+            }
+          }
+        }
       }
     } catch (e) {
       console.error('[MagnetFlow] Failed to collect active download names for files list:', e.message);
@@ -108,8 +126,8 @@ router.get('/list', async (req, res) => {
         const relativePath = path.relative(DOWNLOAD_DIR, fullPath);
         const isDirectory = entry.isDirectory();
         
-        // A file is downloading if its companion .aria2 file exists, or it is in the active task list
-        const isDownloading = allEntries.some(e => e.name === entry.name + '.aria2') || activeDownloadNames.has(entry.name);
+        // A file/folder is downloading if it's currently associated with active/incomplete tasks
+        const isDownloading = activeDownloadNames.has(entry.name);
 
         try {
           const stat = await fs.stat(fullPath);
