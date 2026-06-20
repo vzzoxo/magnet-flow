@@ -191,6 +191,75 @@ router.post('/upload', async (req, res) => {
   }
 });
 
+/**
+ * POST /download
+ * Copy a file/folder from a cloud remote to local (DOWNLOAD_DIR).
+ * Body: { remote, path, dest? } — dest is the relative destination folder inside DOWNLOAD_DIR.
+ * Returns: { jobid, name, remote, isDirectory }
+ */
+router.post('/download', async (req, res) => {
+  try {
+    const { remote, path: remotePath, dest } = req.body;
+    if (!remote || !remotePath) {
+      return res.status(400).json({ error: 'remote and path are required' });
+    }
+
+    // Whitelist the remote
+    const configured = remoteNames((await rclone.listRemotes()).remotes);
+    if (!configured.includes(remote)) {
+      return res.status(400).json({ error: `Unknown remote: ${remote}` });
+    }
+
+    // Stat the remote object to get size, name, isDir
+    let remoteInfo;
+    try {
+      remoteInfo = await rclone.call('operations/stat', { fs: remote + ':', remote: remotePath });
+    } catch (e) {
+      return res.status(502).json({ error: '无法读取网盘文件信息: ' + e.message });
+    }
+
+    if (!remoteInfo || !remoteInfo.item) {
+      return res.status(404).json({ error: '网盘文件或文件夹不存在' });
+    }
+
+    const { item } = remoteInfo;
+    const isDirectory = !!item.IsDir;
+    const name = item.Name || path.posix.basename(remotePath);
+
+    // Resolve and validate local destination path
+    const localDestDir = dest ? resolveSafePath(dest, DOWNLOAD_DIR) : DOWNLOAD_DIR;
+    const absPath = path.join(localDestDir, name);
+
+    // Refuse download if already downloading/incomplete in aria2
+    if (await isPathDownloading(absPath)) {
+      return res.status(409).json({ error: '该文件已经在下载任务中，请勿重复下载' });
+    }
+
+    let job;
+    if (isDirectory) {
+      // For directories, sync/copy remotePath into localDestDir/name
+      const srcFs = `${remote}:${remotePath}`;
+      const dstFs = absPath;
+      job = await rclone.copyDirAsync(srcFs, dstFs);
+    } else {
+      // For single files, copyfile from remote dir to localDestDir
+      const remoteDir = path.posix.dirname(remotePath);
+      const srcFs = `${remote}:${remoteDir === '.' ? '' : remoteDir}`;
+      const srcRemote = name;
+      const dstFs = localDestDir;
+      const dstRemote = name;
+      job = await rclone.copyFileAsync(srcFs, srcRemote, dstFs, dstRemote);
+    }
+
+    console.log(`[MagnetFlow] Download started: ${remote}:${remotePath} → ${absPath} (job ${job.jobid})`);
+    res.json({ jobid: job.jobid, name, remote, isDirectory });
+  } catch (err) {
+    console.error('[MagnetFlow] Download from remote error:', err.message);
+    if (isAccessDenied(err)) return res.status(403).json({ error: err.message });
+    res.status(502).json({ error: err.message });
+  }
+});
+
 /** Turn a verbose rclone error into a short, user-friendly message. */
 function cleanUploadError(msg) {
   msg = String(msg || '');

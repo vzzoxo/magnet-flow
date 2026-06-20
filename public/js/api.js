@@ -200,6 +200,13 @@ window.API = (function () {
       });
     },
 
+    downloadFromRemote(remote, path, dest) {
+      return api.request('/api/remotes/download', {
+        method: 'POST',
+        body: JSON.stringify({ remote, path, dest }),
+      });
+    },
+
     getUploadJob(jobid) {
       return api.request('/api/remotes/job/' + jobid);
     },

@@ -523,21 +523,22 @@
     return panel;
   }
 
-  function trackUpload(jobid, name, remote) {
+  function trackUpload(jobid, name, remote, isDownload = false) {
     if (jobid == null) return;
     const panel = ensureUploadsPanel();
     const row = document.createElement('div');
     row.className = 'upload-item';
+    const icon = isDownload ? '📥' : '☁️';
     row.innerHTML = `
       <div class="upload-item-head">
-        <span class="upload-item-name" title="${escapeHtml(name)}">☁️ ${escapeHtml(name)}</span>
+        <span class="upload-item-name" title="${escapeHtml(name)}">${icon} ${escapeHtml(name)}</span>
         <span class="upload-item-status">排队中…</span>
       </div>
       <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
       <div class="upload-item-meta"><span>${escapeHtml(remote)}</span><span class="upload-item-pct">0%</span></div>
     `;
     panel.appendChild(row);
-    _uploads.set(jobid, { name, remote, el: row });
+    _uploads.set(jobid, { name, remote, el: row, isDownload });
     if (!_uploadTimer) _uploadTimer = setInterval(pollUploads, 1500);
   }
 
@@ -574,20 +575,23 @@
           statusEl.textContent = '已完成';
           statusEl.className = 'upload-item-status text-success';
           pctEl.textContent = '100%';
-          showToast(`「${info.name}」已上传到 ${info.remote}`, 'success');
+          const actionText = info.isDownload ? '下载到本地' : '上传到网盘';
+          showToast(`「${info.name}」已${actionText}`, 'success');
           setTimeout(() => el.remove(), 6000);
         } else {
           fill.classList.remove('active');
           statusEl.textContent = '失败';
           statusEl.className = 'upload-item-status text-danger';
-          showToast(`上传失败「${info.name}」: ${st.error || '未知错误'}`, 'error', 6000);
+          const actionText = info.isDownload ? '下载' : '上传';
+          showToast(`${actionText}失败「${info.name}」: ${st.error || '未知错误'}`, 'error', 6000);
           setTimeout(() => el.remove(), 10000);
         }
       } else {
         fill.classList.add('active');
         fill.style.width = st.percentage + '%';
         pctEl.textContent = st.percentage + '%';
-        statusEl.textContent = st.speed ? formatSpeed(st.speed) : '上传中…';
+        const defaultText = info.isDownload ? '下载中…' : '上传中…';
+        statusEl.textContent = st.speed ? formatSpeed(st.speed) : defaultText;
       }
     }
   }
@@ -1741,7 +1745,8 @@
 
   function cloudActionsMenu(remote, f, refresh) {
     const items = [
-      ...(f.isDir ? [] : [{ a: 'download', t: '⬇️ 下载' }, { a: 'link', t: '🔗 复制直链' }]),
+      { a: 'download-local', t: '📥 下载到服务器' },
+      ...(f.isDir ? [] : [{ a: 'download', t: '⬇️ 下载到浏览器' }, { a: 'link', t: '🔗 复制直链' }]),
       { a: 'delete', t: '🗑️ 删除', danger: true },
     ];
     showModal(f.name,
@@ -1750,7 +1755,15 @@
       b.onclick = async () => {
         const act = b.dataset.act;
         hideModal();
-        if (act === 'download') {
+        if (act === 'download-local') {
+          try {
+            const res = await API.downloadFromRemote(remote, f.path);
+            showToast(`已开始将「${f.name}」下载到本地服务器`, 'success');
+            trackUpload(res.jobid, f.name, remote, true);
+          } catch (e) {
+            showToast('开始下载失败: ' + e.message, 'error');
+          }
+        } else if (act === 'download') {
           const w = window.open('', '_blank');
           const url = await API.getRemoteStreamUrl(remote, f.path);
           if (w) w.location = url; else window.location = url;
