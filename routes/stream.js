@@ -2,6 +2,7 @@
 
 const express = require('express');
 const fs = require('fs');
+const fsPromises = require('fs/promises');
 const mime = require('mime-types');
 const {
   authMiddleware,
@@ -58,7 +59,7 @@ function streamAuth(req, res, next) {
  * GET /video/*
  * Stream a file with HTTP Range support. Path is relative to DOWNLOAD_DIR.
  */
-router.get('/video/*', streamAuth, (req, res) => {
+router.get('/video/*', streamAuth, async (req, res) => {
   try {
     const relativePath = req.params[0];
 
@@ -75,12 +76,16 @@ router.get('/video/*', streamAuth, (req, res) => {
 
     const filePath = resolveSafePath(relativePath, DOWNLOAD_DIR);
 
-    if (!fs.existsSync(filePath)) {
-      console.log(`[MagnetFlow] Stream 404: ${filePath}`);
-      return res.status(404).json({ error: 'File not found' });
+    let stat;
+    try {
+      stat = await fsPromises.stat(filePath);
+    } catch (e) {
+      if (e.code === 'ENOENT') {
+        console.log(`[MagnetFlow] Stream 404: ${filePath}`);
+        return res.status(404).json({ error: 'File not found' });
+      }
+      throw e;
     }
-
-    const stat = fs.statSync(filePath);
     if (stat.isDirectory()) {
       return res.status(400).json({ error: 'Cannot stream a directory' });
     }
@@ -88,6 +93,8 @@ router.get('/video/*', streamAuth, (req, res) => {
     const fileSize = stat.size;
     const contentType = mime.lookup(filePath) || 'application/octet-stream';
     res.setHeader('Accept-Ranges', 'bytes');
+    // Allow the browser to cache the streamed media for this session
+    res.setHeader('Cache-Control', 'private, max-age=3600');
 
     const rangeHeader = req.headers.range;
 
@@ -110,7 +117,11 @@ router.get('/video/*', streamAuth, (req, res) => {
         'Content-Type': contentType,
       });
 
-      const stream = fs.createReadStream(filePath, { start, end: clampedEnd });
+      const stream = fs.createReadStream(filePath, {
+        start,
+        end: clampedEnd,
+        highWaterMark: 256 * 1024, // 256KB chunks for smoother streaming
+      });
       stream.on('error', (err) => {
         console.error('[MagnetFlow] Stream read error:', err.message);
         if (!res.headersSent) res.status(500).end();
@@ -122,7 +133,9 @@ router.get('/video/*', streamAuth, (req, res) => {
         'Content-Type': contentType,
       });
 
-      const stream = fs.createReadStream(filePath);
+      const stream = fs.createReadStream(filePath, {
+        highWaterMark: 256 * 1024, // 256KB chunks for smoother streaming
+      });
       stream.on('error', (err) => {
         console.error('[MagnetFlow] Stream read error:', err.message);
         if (!res.headersSent) res.status(500).end();

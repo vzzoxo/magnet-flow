@@ -45,7 +45,7 @@
     return parts.length > 1 ? parts.pop().toLowerCase() : '';
   }
 
-  const VIDEO_EXTS = new Set(['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm3u8', 'ts']);
+  const VIDEO_EXTS = new Set(['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm3u8', 'ts', '3gp', 'm4v', 'rmvb', 'rm', 'asf', 'divx', 'mpg', 'mpeg', 'vob']);
   const AUDIO_EXTS = new Set(['mp3', 'flac', 'wav', 'aac', 'ogg', 'wma', 'm4a']);
   const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico']);
   const ARCHIVE_EXTS = new Set(['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'zst']);
@@ -137,6 +137,25 @@
     add: SVG('<path d="M12 5v14M5 12h14"/>'),
     pip: SVG('<rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="7" height="6" rx="1"/>'),
   };
+
+  // Lazy-load HLS.js only when the player page needs it.
+  let _hlsLoaded = false;
+  let _lastNetdiskParam = null;
+  let _lastNetdiskData = null;
+  let _lastNetdiskRemotes = null;
+  let _lastFileManagerPath = null;
+  let _lastFileManagerItems = null;
+
+  function loadHls() {
+    if (_hlsLoaded || typeof Hls !== 'undefined') return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = '/js/hls.min.js?v=1.5.17';
+      s.onload = () => { _hlsLoaded = true; resolve(); };
+      s.onerror = () => reject(new Error('Failed to load HLS.js'));
+      document.head.appendChild(s);
+    });
+  }
 
   function showToast(message, type = 'info', duration = 3500) {
     const container = document.getElementById('toast-container');
@@ -327,7 +346,7 @@
         await API.createDir(fullPath);
         showToast('文件夹已创建', 'success');
         hideModal();
-        renderFileManager(currentPath);
+        renderFileManager(currentPath, true);
       } catch (err) {
         showToast('创建失败: ' + err.message, 'error');
       }
@@ -608,6 +627,7 @@
   let wsReconnectDelay = 1000;
   let hlsInstance = null;
   let downloadRefreshTimer = null;
+  let renderFrameId = null;
 
 
   /* ══════════════════════════════════════════════════════
@@ -1081,54 +1101,92 @@
      File Manager Page
      ══════════════════════════════════════════════════════ */
 
-  async function renderFileManager(path) {
+  async function renderFileManager(path, force = false) {
     path = path || '';
     const main = document.getElementById('main-content');
+    const view = localStorage.getItem('mf_fileview') === 'grid' ? 'grid' : 'list';
 
-    main.innerHTML = `
-      <div class="page-header">
-        <h1 class="page-title">📁 文件管理</h1>
-      </div>
-
-      <div class="breadcrumb" id="file-breadcrumb"></div>
-
-      <div class="file-toolbar" id="file-toolbar">
-        <button class="btn-primary btn-sm" id="btn-new-folder">${ACTION_ICONS.folderPlus} 新建文件夹</button>
-        <button class="btn-secondary btn-sm" id="btn-delete-selected" disabled>${ACTION_ICONS.delete} 删除选中</button>
-        <input type="search" id="file-search" class="form-input file-search" placeholder="🔍 搜索当前目录…">
-      </div>
-
-      <div id="file-content">
-        <div class="empty-state">
-          <div class="empty-state-icon">⏳</div>
-          <div class="empty-state-title">加载中…</div>
+    const needsFetch = force || path !== _lastFileManagerPath || !_lastFileManagerItems;
+    if (needsFetch) {
+      main.innerHTML = `
+        <div class="page-header">
+          <h1 class="page-title">📁 文件管理</h1>
         </div>
-      </div>
-    `;
+
+        <div class="breadcrumb" id="file-breadcrumb"></div>
+
+        <div class="file-toolbar" id="file-toolbar">
+          <button class="btn-primary btn-sm" id="btn-new-folder">${ACTION_ICONS.folderPlus} 新建文件夹</button>
+          <button class="btn-secondary btn-sm" id="btn-delete-selected" disabled>${ACTION_ICONS.delete} 删除选中</button>
+          <input type="search" id="file-search" class="form-input file-search" placeholder="🔍 搜索当前目录…">
+          <div class="view-toggle">
+            <button class="vt-btn ${view === 'list' ? 'active' : ''}" data-view="list" title="列表">${FT_ICONS.list}</button>
+            <button class="vt-btn ${view === 'grid' ? 'active' : ''}" data-view="grid" title="网格">${FT_ICONS.grid}</button>
+          </div>
+        </div>
+
+        <div id="file-content">
+          <div class="empty-state">
+            <div class="empty-state-icon">⏳</div>
+            <div class="empty-state-title">加载中…</div>
+          </div>
+        </div>
+      `;
+    } else {
+      const toolbar = document.getElementById('file-toolbar');
+      if (toolbar) {
+        toolbar.innerHTML = `
+          <button class="btn-primary btn-sm" id="btn-new-folder">${ACTION_ICONS.folderPlus} 新建文件夹</button>
+          <button class="btn-secondary btn-sm" id="btn-delete-selected" disabled>${ACTION_ICONS.delete} 删除选中</button>
+          <input type="search" id="file-search" class="form-input file-search" placeholder="🔍 搜索当前目录…">
+          <div class="view-toggle">
+            <button class="vt-btn ${view === 'list' ? 'active' : ''}" data-view="list" title="列表">${FT_ICONS.list}</button>
+            <button class="vt-btn ${view === 'grid' ? 'active' : ''}" data-view="grid" title="网格">${FT_ICONS.grid}</button>
+          </div>
+        `;
+      }
+    }
 
     renderBreadcrumb(path);
 
     document.getElementById('btn-new-folder').onclick = () => newFolderModal(path);
 
-    try {
-      const res = await API.listFiles(path);
-      if (res && res.items) {
-        renderFileTable(res.items, path);
-      } else {
+    const toggleBtns = document.querySelectorAll('#file-toolbar .vt-btn');
+    toggleBtns.forEach(btn => {
+      btn.onclick = () => {
+        const v = btn.dataset.view;
+        localStorage.setItem('mf_fileview', v);
+        renderFileManager(path, false);
+      };
+    });
+
+    let items = _lastFileManagerItems;
+    if (needsFetch) {
+      try {
+        const res = await API.listFiles(path);
+        items = (res && res.items) || null;
+        _lastFileManagerPath = path;
+        _lastFileManagerItems = items;
+      } catch (err) {
         document.getElementById('file-content').innerHTML = `
           <div class="empty-state">
-            <div class="empty-state-icon">📂</div>
-            <div class="empty-state-title">空文件夹</div>
-            <div class="empty-state-desc">此目录下暂无文件</div>
+            <div class="empty-state-icon">❌</div>
+            <div class="empty-state-title">加载失败</div>
+            <div class="empty-state-desc">${escapeHtml(err.message)}</div>
           </div>
         `;
+        return;
       }
-    } catch (err) {
+    }
+
+    if (items && items.length) {
+      renderFileTable(items, path);
+    } else {
       document.getElementById('file-content').innerHTML = `
         <div class="empty-state">
-          <div class="empty-state-icon">❌</div>
-          <div class="empty-state-title">加载失败</div>
-          <div class="empty-state-desc">${escapeHtml(err.message)}</div>
+          <div class="empty-state-icon">📂</div>
+          <div class="empty-state-title">空文件夹</div>
+          <div class="empty-state-desc">此目录下暂无文件</div>
         </div>
       `;
     }
@@ -1165,6 +1223,7 @@
 
   function renderFileTable(files, currentPath) {
     const content = document.getElementById('file-content');
+    const view = localStorage.getItem('mf_fileview') === 'grid' ? 'grid' : 'list';
 
     // Backend returns `isDirectory`; the rest of this view uses `isDir`.
     // Normalize so directory detection (icon, size, navigation) works.
@@ -1180,109 +1239,95 @@
       return (a.name || '').localeCompare(b.name || '');
     });
 
-    content.innerHTML = `
-      <div class="table-wrap">
-      <table class="file-table">
-        <thead>
-          <tr>
-            <th width="40"><input type="checkbox" id="selectAll"></th>
-            <th width="40"></th>
-            <th>名称</th>
-            <th width="100">大小</th>
-            <th width="150" class="col-date">修改时间</th>
-            <th width="150">操作</th>
-          </tr>
-        </thead>
-        <tbody id="file-tbody">
+    if (view === 'grid') {
+      content.innerHTML = `
+        <div class="grid-wrap">
           ${sorted.map(f => {
             const pathStr = escapeHtml(f.relativePath);
             const nameStr = escapeHtml(f.name);
             const icon = getFileIcon(f.name, f.isDir);
-            const sizeStr = f.isDir ? '--' : formatBytes(f.size);
-            const dateStr = formatDate(f.modified);
-            const dlBadge = f.isDownloading ? '<span class="badge badge-active" style="margin-left: 8px; font-size: 0.75rem; padding: 2px 6px; vertical-align: middle;">下载中</span>' : '';
+            const sizeStr = f.isDir ? '文件夹' : formatBytes(f.size);
+            const dlBadge = f.isDownloading ? '<span class="badge badge-active" style="position: absolute; bottom: 8px; left: 8px; font-size: 0.7rem; padding: 1px 4px; z-index: 5;">下载中</span>' : '';
             
+            let thumbnailHtml = '';
+            const isImg = IMAGE_EXTS.has(getExtension(f.name));
+            const isVid = VIDEO_EXTS.has(getExtension(f.name));
+
+            if (!f.isDir && (isImg || isVid)) {
+              const thumbUrl = `/api/files/thumbnail?path=${encodeURIComponent(f.relativePath)}&token=${encodeURIComponent(API.token)}`;
+              thumbnailHtml = `<img class="grid-img-thumb" src="${thumbUrl}" alt="${nameStr}" loading="lazy" onerror="this.onerror=null; this.outerHTML='<div class=&quot;grid-icon&quot;>${icon}</div>'">`;
+            } else {
+              thumbnailHtml = `<div class="grid-icon">${icon}</div>`;
+            }
+
             return `
-              <tr class="file-row" data-path="${pathStr}" data-name="${nameStr}" data-isdir="${f.isDir}">
-                <td onclick="event.stopPropagation()"><input type="checkbox" class="file-cb" value="${pathStr}"></td>
-                <td class="text-center">${icon}</td>
-                <td class="file-name-cell" title="${nameStr}"><span class="fname" style="vertical-align: middle;">${nameStr}</span>${dlBadge}</td>
-                <td class="text-muted">${sizeStr}</td>
-                <td class="text-muted col-date">${dateStr}</td>
-                <td onclick="event.stopPropagation()">
-                  <div class="flex gap-4 file-actions-inline">
-                    <button class="btn-icon" title="上传到网盘" data-action="upload" data-path="${pathStr}" data-name="${nameStr}">${ACTION_ICONS.upload}</button>
-                    ${!f.isDir && isArchiveFile(f.name) ? `<button class="btn-icon" title="解压" data-action="extract" data-path="${pathStr}">${ACTION_ICONS.extract}</button>` : ''}
-                    <button class="btn-icon" title="复制" data-action="copy" data-path="${pathStr}" data-name="${nameStr}">${ACTION_ICONS.copy}</button>
-                    <button class="btn-icon" title="移动 / 重命名" data-action="move" data-path="${pathStr}" data-name="${nameStr}">${ACTION_ICONS.move}</button>
-                    <button class="btn-icon danger" title="删除" data-action="delete" data-path="${pathStr}" data-name="${nameStr}">${ACTION_ICONS.delete}</button>
-                  </div>
-                  <button class="btn-icon file-more" title="操作" data-action="more" data-path="${pathStr}" data-name="${nameStr}" data-archive="${!f.isDir && isArchiveFile(f.name)}">⋯</button>
-                </td>
-              </tr>
+              <div class="grid-cell file-row" data-path="${pathStr}" data-name="${nameStr}" data-isdir="${f.isDir}">
+                <div class="grid-checkbox" onclick="event.stopPropagation()">
+                  <input type="checkbox" class="file-cb" value="${pathStr}">
+                </div>
+                <button class="btn-icon file-more grid-more-btn" title="操作" data-action="more" data-path="${pathStr}" data-name="${nameStr}" data-archive="${!f.isDir && isArchiveFile(f.name)}">⋯</button>
+                <div class="grid-thumb-container">
+                  ${thumbnailHtml}
+                </div>
+                <div class="grid-cell-name" title="${nameStr}">${nameStr}</div>
+                <div class="grid-cell-size text-muted">${sizeStr}</div>
+                ${dlBadge}
+              </div>
             `;
           }).join('')}
-        </tbody>
-      </table>
-      </div>
-    `;
-
-    // Row click navigation
-    document.querySelectorAll('.file-row').forEach(row => {
-      row.onclick = async () => {
-        const p = row.dataset.path;
-        const isDir = row.dataset.isdir === 'true';
-        if (isDir) {
-          window.location.hash = '#files/' + encodeURIComponent(p);
-        } else if (isVideoFile(p) || isAudioFile(p)) {
-          window.location.hash = '#player/' + encodeURIComponent(p);
-        } else {
-          // Trigger download/open for other files. Open the tab synchronously
-          // (within the click gesture) to avoid popup blocking, then navigate
-          // it once the scoped stream token is fetched.
-          const w = window.open('', '_blank');
-          const url = await API.getStreamUrl(p);
-          if (w) w.location = url;
-          else window.location = url;
-        }
-      };
-    });
-
-    // Checkbox select all
-    const selectAll = document.getElementById('selectAll');
-    const checkboxes = document.querySelectorAll('.file-cb');
-    const btnDeleteSel = document.getElementById('btn-delete-selected');
-
-    const updateDeleteBtn = () => {
-      const count = document.querySelectorAll('.file-cb:checked').length;
-      btnDeleteSel.disabled = count === 0;
-      btnDeleteSel.innerHTML = count > 0 ? `🗑️ 删除选中 (${count})` : '🗑️ 删除选中';
-    };
-
-    if (selectAll) {
-      selectAll.onchange = (e) => {
-        checkboxes.forEach(cb => cb.checked = e.target.checked);
-        updateDeleteBtn();
-      };
+        </div>
+      `;
+    } else {
+      content.innerHTML = `
+        <div class="table-wrap">
+        <table class="file-table">
+          <thead>
+            <tr>
+              <th width="40"><input type="checkbox" id="selectAll"></th>
+              <th width="40"></th>
+              <th>名称</th>
+              <th width="100">大小</th>
+              <th width="150" class="col-date">修改时间</th>
+              <th width="150">操作</th>
+            </tr>
+          </thead>
+          <tbody id="file-tbody">
+            ${sorted.map(f => {
+              const pathStr = escapeHtml(f.relativePath);
+              const nameStr = escapeHtml(f.name);
+              const icon = getFileIcon(f.name, f.isDir);
+              const sizeStr = f.isDir ? '--' : formatBytes(f.size);
+              const dateStr = formatDate(f.modified);
+              const dlBadge = f.isDownloading ? '<span class="badge badge-active" style="margin-left: 8px; font-size: 0.75rem; padding: 2px 6px; vertical-align: middle;">下载中</span>' : '';
+              
+              return `
+                <tr class="file-row" data-path="${pathStr}" data-name="${nameStr}" data-isdir="${f.isDir}">
+                  <td onclick="event.stopPropagation()"><input type="checkbox" class="file-cb" value="${pathStr}"></td>
+                  <td class="text-center">${icon}</td>
+                  <td class="file-name-cell" title="${nameStr}"><span class="fname" style="vertical-align: middle;">${nameStr}</span>${dlBadge}</td>
+                  <td class="text-muted">${sizeStr}</td>
+                  <td class="text-muted col-date">${dateStr}</td>
+                  <td onclick="event.stopPropagation()">
+                    <div class="flex gap-4 file-actions-inline">
+                      <button class="btn-icon" title="上传到网盘" data-action="upload" data-path="${pathStr}" data-name="${nameStr}">${ACTION_ICONS.upload}</button>
+                      ${!f.isDir && isArchiveFile(f.name) ? `<button class="btn-icon" title="解压" data-action="extract" data-path="${pathStr}">${ACTION_ICONS.extract}</button>` : ''}
+                      <button class="btn-icon" title="复制" data-action="copy" data-path="${pathStr}" data-name="${nameStr}">${ACTION_ICONS.copy}</button>
+                      <button class="btn-icon" title="移动 / 重命名" data-action="move" data-path="${pathStr}" data-name="${nameStr}">${ACTION_ICONS.move}</button>
+                      <button class="btn-icon danger" title="删除" data-action="delete" data-path="${pathStr}" data-name="${nameStr}">${ACTION_ICONS.delete}</button>
+                    </div>
+                    <button class="btn-icon file-more" title="操作" data-action="more" data-path="${pathStr}" data-name="${nameStr}" data-archive="${!f.isDir && isArchiveFile(f.name)}">⋯</button>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+        </div>
+      `;
     }
 
-    checkboxes.forEach(cb => {
-      cb.onchange = updateDeleteBtn;
-    });
-
-    btnDeleteSel.onclick = async () => {
-      const selected = Array.from(document.querySelectorAll('.file-cb:checked')).map(cb => cb.value);
-      if (!selected.length) return;
-      confirmDeleteModal('已选中的 ' + selected.length + ' 个文件', '多文件', async () => {
-        for (const p of selected) {
-          try { await API.deleteFile(p); } catch (e) { /* ignore individual errs */ }
-        }
-        renderFileManager(currentPath);
-      });
-    };
-
     // File actions: inline buttons (desktop) + a "⋯" menu (mobile).
-    const refreshFM = () => renderFileManager(currentPath);
+    const refreshFM = () => renderFileManager(currentPath, true);
     async function handleFileAction(action, p, name) {
       if (action === 'delete') {
         confirmDeleteModal(p, name, refreshFM);
@@ -1304,26 +1349,76 @@
       }
     }
 
-    document.querySelectorAll('[data-action]').forEach(btn => {
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        const action = btn.dataset.action;
-        const p = btn.dataset.path;
-        const name = btn.dataset.name;
-        if (action === 'more') {
-          fileActionsMenu(p, name, btn.dataset.archive === 'true', handleFileAction);
-        } else {
-          handleFileAction(action, p, name);
+    // Delegated event handling: one handler on the container instead of per-row.
+    const fileContent = document.getElementById('file-content');
+    if (fileContent && !fileContent._mfDelegated) {
+      fileContent._mfDelegated = true;
+      fileContent.addEventListener('click', async (e) => {
+        // Handle action buttons (upload, extract, copy, move, delete, more)
+        const actionBtn = e.target.closest('[data-action]');
+        if (actionBtn && fileContent.contains(actionBtn)) {
+          e.stopPropagation();
+          const action = actionBtn.dataset.action;
+          const p = actionBtn.dataset.path;
+          const name = actionBtn.dataset.name;
+          if (action === 'more') {
+            fileActionsMenu(p, name, actionBtn.dataset.archive === 'true', handleFileAction);
+          } else {
+            handleFileAction(action, p, name);
+          }
+          return;
         }
-      };
-    });
+
+        // Handle row clicks (navigation/play/open)
+        const row = e.target.closest('.file-row');
+        if (row && fileContent.contains(row)) {
+          // Skip if click was on a checkbox or action td
+          if (e.target.closest('input[type="checkbox"]')) return;
+          const p = row.dataset.path;
+          const isDir = row.dataset.isdir === 'true';
+          if (isDir) {
+            window.location.hash = '#files/' + encodeURIComponent(p);
+          } else if (isVideoFile(p) || isAudioFile(p)) {
+            window.location.hash = '#player/' + encodeURIComponent(p);
+          } else {
+            const w = window.open('', '_blank');
+            const url = await API.getStreamUrl(p);
+            if (w) w.location = url;
+            else window.location = url;
+          }
+        }
+      });
+
+      // Delegated checkbox change handler
+      fileContent.addEventListener('change', (e) => {
+        if (e.target.classList.contains('file-cb') || e.target.id === 'selectAll') {
+          if (e.target.id === 'selectAll') {
+            fileContent.querySelectorAll('.file-cb').forEach(cb => cb.checked = e.target.checked);
+          }
+          const count = fileContent.querySelectorAll('.file-cb:checked').length;
+          btnDeleteSel.disabled = count === 0;
+          btnDeleteSel.innerHTML = count > 0 ? `🗑️ 删除选中 (${count})` : '🗑️ 删除选中';
+        }
+      });
+    }
+
+    btnDeleteSel.onclick = async () => {
+      const selected = Array.from(fileContent.querySelectorAll('.file-cb:checked')).map(cb => cb.value);
+      if (!selected.length) return;
+      confirmDeleteModal('已选中的 ' + selected.length + ' 个文件', '多文件', async () => {
+        for (const p of selected) {
+          try { await API.deleteFile(p); } catch (e) { /* ignore individual errs */ }
+        }
+        renderFileManager(currentPath, true);
+      });
+    };
 
     // Live search filter for the current directory.
     const searchEl = document.getElementById('file-search');
     if (searchEl) {
       searchEl.oninput = () => {
         const q = searchEl.value.trim().toLowerCase();
-        document.querySelectorAll('#file-content .file-row').forEach(r => {
+        fileContent.querySelectorAll('.file-row').forEach(r => {
           const n = (r.dataset.name || '').toLowerCase();
           r.style.display = (!q || n.includes(q)) ? '' : 'none';
         });
@@ -1618,8 +1713,15 @@
     const streamUrl = await API.getStreamUrl(filePath);
 
     if (!isAudio && filePath.endsWith('.m3u8')) {
-      if (Hls.isSupported()) {
-        hlsInstance = new Hls();
+      await loadHls();
+      if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+        hlsInstance = new Hls({
+          maxBufferLength: 30,
+          maxMaxBufferLength: 60,
+          maxBufferSize: 30 * 1000 * 1000,
+          maxBufferHole: 0.5,
+          startFragPrefetch: true,
+        });
         hlsInstance.loadSource(streamUrl);
         hlsInstance.attachMedia(video);
         hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -1784,20 +1886,30 @@
     });
   }
 
-  async function renderNetdisk(param) {
+  async function renderNetdisk(param, force = false) {
     const main = document.getElementById('main-content');
     const slash = param.indexOf('/');
     const remote = slash === -1 ? param : param.slice(0, slash);
     const relPath = slash === -1 ? '' : decodeURIComponent(param.slice(slash + 1));
 
-    main.innerHTML = `
-      <div class="page-header"><h1 class="page-title">☁️ 网盘</h1></div>
-      <div id="netdisk-content">${netSkeleton()}</div>`;
+    const needsFetch = force || param !== _lastNetdiskParam || !_lastNetdiskData;
+    if (needsFetch) {
+      main.innerHTML = `
+        <div class="page-header"><h1 class="page-title">☁️ 网盘</h1></div>
+        <div id="netdisk-content">${netSkeleton()}</div>`;
+    }
     const content = document.getElementById('netdisk-content');
 
-    let names = [];
-    try { names = ((await API.listRemotes()).remotes) || []; }
-    catch (err) { content.innerHTML = netEmpty('❌', '加载失败', err.message); return; }
+    let names = _lastNetdiskRemotes;
+    if (force || !names) {
+      try {
+        names = ((await API.listRemotes()).remotes) || [];
+        _lastNetdiskRemotes = names;
+      } catch (err) {
+        content.innerHTML = netEmpty('❌', '加载失败', err.message);
+        return;
+      }
+    }
     if (!names.length) { content.innerHTML = netEmpty('☁️', '尚未连接网盘', '请先在服务器用 rclone 连接 OneDrive / Google Drive'); return; }
 
     // Remote picker (with provider icon + capacity)
@@ -1811,12 +1923,20 @@
       return;
     }
 
-    let data;
-    try { data = await API.browseRemote(remote, relPath); }
-    catch (err) { content.innerHTML = netEmpty('❌', '无法读取该网盘目录', err.message); return; }
+    let data = _lastNetdiskData;
+    if (needsFetch) {
+      try {
+        data = await API.browseRemote(remote, relPath);
+        _lastNetdiskParam = param;
+        _lastNetdiskData = data;
+      } catch (err) {
+        content.innerHTML = netEmpty('❌', '无法读取该网盘目录', err.message);
+        return;
+      }
+    }
 
     const view = localStorage.getItem('mf_netview') === 'grid' ? 'grid' : 'list';
-    const refresh = () => renderNetdisk(param);
+    const refresh = () => renderNetdisk(param, true);
 
     const segs = relPath ? relPath.split('/') : [];
     let acc = '';
@@ -2371,8 +2491,15 @@
       downloads = [...active, ...waiting, ...stopped];
 
       if (currentPage === 'dashboard') {
-        renderDownloadList();
-        updateStats();
+        if (!renderFrameId) {
+          renderFrameId = requestAnimationFrame(() => {
+            renderFrameId = null;
+            if (currentPage === 'dashboard') {
+              renderDownloadList();
+              updateStats();
+            }
+          });
+        }
       }
     }
   }

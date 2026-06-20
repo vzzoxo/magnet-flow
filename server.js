@@ -9,6 +9,7 @@ const { WebSocketServer } = require('ws');
 const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs/promises');
+const compression = require('compression');
 
 const { verifyToken, hashPassword, assertSecretConfigured } = require('./lib/auth');
 const {
@@ -53,8 +54,17 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-// Serve static files from public/
-app.use(express.static(PUBLIC_DIR));
+// Enable gzip/deflate compression for all responses.
+app.use(compression({ threshold: 1024 }));
+
+// Serve static files with cache headers. The ?v= query string in HTML
+// references ensures stale caches are busted on upgrades.
+app.use(express.static(PUBLIC_DIR, {
+  maxAge: '7d',
+  immutable: true,
+  etag: true,
+  lastModified: true,
+}));
 
 // Mount API routes
 app.use('/api/auth', require('./routes/auth'));
@@ -71,11 +81,14 @@ app.use('/api', (req, res) => {
   res.status(404).json({ error: 'API endpoint not found' });
 });
 
+// Cache the index.html lookup once at startup.
+const INDEX_HTML = path.join(PUBLIC_DIR, 'index.html');
+const _indexExists = fs.existsSync(INDEX_HTML);
+
 // SPA fallback: serve index.html for any non-API GET request
 app.get('*', (req, res) => {
-  const indexPath = path.join(PUBLIC_DIR, 'index.html');
-  if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath);
+  if (_indexExists) {
+    res.sendFile(INDEX_HTML);
   } else {
     res.status(404).json({ error: 'Frontend not found. Place index.html in public/' });
   }
@@ -152,10 +165,17 @@ wss.on('connection', (ws) => {
 
 /**
  * Broadcast a message to all authenticated WebSocket clients.
+ * Skips broadcasting if the data hasn't changed since the last push.
  * @param {object} data - Data to broadcast (will be JSON.stringify'd)
  */
+let _lastBroadcastHash = '';
 function broadcast(data) {
   const payload = JSON.stringify(data);
+  // Skip if the data is identical to the last broadcast (fast length+prefix check)
+  const hash = payload.length + ':' + payload.slice(0, 200);
+  if (hash === _lastBroadcastHash) return;
+  _lastBroadcastHash = hash;
+
   for (const client of authenticatedClients) {
     if (client.readyState === 1) { // WebSocket.OPEN
       try {

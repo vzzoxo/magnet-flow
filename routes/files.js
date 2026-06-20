@@ -3,9 +3,10 @@
 const express = require('express');
 const fs = require('fs/promises');
 const path = require('path');
+const crypto = require('crypto');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
-const { authMiddleware } = require('../lib/auth');
+const { authMiddleware, streamAuthMiddleware } = require('../lib/auth');
 const { resolveSafePath, isAccessDenied } = require('../lib/paths');
 const { DOWNLOAD_DIR } = require('../lib/config');
 
@@ -13,7 +14,99 @@ const execFileAsync = promisify(execFile);
 const engines = require('../lib/engines');
 const router = express.Router();
 
-// All file routes require authentication
+const THUMB_DIR = path.join(__dirname, '../data/thumbnails');
+
+// Ensure thumbnails directory exists
+fs.mkdir(THUMB_DIR, { recursive: true }).catch(() => {});
+
+/**
+ * GET /thumbnail?path=<relativePath>&token=<activeSessionToken>
+ * Serve images directly or extract video frames using ffmpeg for thumbnails.
+ */
+router.get('/thumbnail', streamAuthMiddleware, async (req, res) => {
+  try {
+    const { path: relativePath } = req.query;
+    if (!relativePath || typeof relativePath !== 'string') {
+      return res.status(400).json({ error: 'Path is required' });
+    }
+
+    const safePath = resolveSafePath(relativePath, DOWNLOAD_DIR);
+    const stat = await fs.stat(safePath);
+    if (stat.isDirectory()) {
+      return res.status(400).json({ error: 'Cannot generate thumbnail for a directory' });
+    }
+
+    const ext = path.extname(safePath).toLowerCase().slice(1);
+    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext);
+    const isVideo = ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'ts', '3gp', 'm4v', 'rmvb', 'rm', 'asf', 'divx', 'mpg', 'mpeg', 'vob'].includes(ext);
+
+    if (!isImage && !isVideo) {
+      return res.status(400).json({ error: 'Unsupported file type' });
+    }
+
+    if (isImage) {
+      return res.sendFile(safePath);
+    }
+
+    // Generate MD5 hash of the relative path to use as cached filename
+    const hash = crypto.createHash('md5').update(relativePath).digest('hex');
+    const thumbPath = path.join(THUMB_DIR, `${hash}.jpg`);
+
+    // Check if cached thumbnail exists
+    try {
+      await fs.access(thumbPath);
+      res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
+      return res.sendFile(thumbPath);
+    } catch {
+      // Not cached, generate it below
+    }
+
+    // Run ffmpeg to extract a frame at 3 seconds
+    const ffmpegArgs = [
+      '-ss', '00:00:03',
+      '-i', safePath,
+      '-vframes', '1',
+      '-q:v', '5',
+      '-vf', 'scale=240:-1',
+      '-y', thumbPath
+    ];
+
+    try {
+      await execFileAsync('ffmpeg', ffmpegArgs);
+    } catch (error) {
+      // Retry seeking at the very beginning (0 seconds) in case the video is too short or has a corrupt index
+      const fallbackArgs = [
+        '-ss', '00:00:00',
+        '-i', safePath,
+        '-vframes', '1',
+        '-q:v', '5',
+        '-vf', 'scale=240:-1',
+        '-y', thumbPath
+      ];
+      try {
+        await execFileAsync('ffmpeg', fallbackArgs);
+      } catch (fallbackError) {
+        console.error('[MagnetFlow] ffmpeg error (and fallback failed):', fallbackError.message);
+        return res.status(500).json({ error: 'Failed to extract thumbnail' });
+      }
+    }
+
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.sendFile(thumbPath);
+
+  } catch (err) {
+    console.error('[MagnetFlow] Thumbnail generation error:', err.message);
+    if (err.code === 'ENOENT') {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    if (isAccessDenied(err)) {
+      return res.status(403).json({ error: err.message });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// All other file routes require header authentication
 router.use(authMiddleware);
 
 /** Map a lowercased path to a supported archive type, or null. */
@@ -130,6 +223,8 @@ router.get('/list', async (req, res) => {
       return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
     });
 
+    // Short cache to avoid duplicate requests during rapid navigation
+    res.setHeader('Cache-Control', 'private, max-age=2');
     res.json({ path: dirPath, items });
   } catch (err) {
     console.error('[MagnetFlow] List files error:', err.message);
