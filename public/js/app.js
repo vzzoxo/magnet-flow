@@ -782,9 +782,24 @@
 
   function cleanup() {
     if (hlsInstance) {
-      hlsInstance.destroy();
+      try {
+        hlsInstance.destroy();
+      } catch (e) {
+        console.error('[MagnetFlow] Error destroying HLS instance:', e);
+      }
       hlsInstance = null;
     }
+    // Safely pause and unload any active video/audio players to release decoders
+    const players = document.querySelectorAll('video, audio');
+    players.forEach(p => {
+      try {
+        p.pause();
+        p.src = '';
+        p.load();
+      } catch (e) {
+        // Ignore
+      }
+    });
     if (downloadRefreshTimer) {
       clearInterval(downloadRefreshTimer);
       downloadRefreshTimer = null;
@@ -1106,7 +1121,7 @@
     const main = document.getElementById('main-content');
     const view = localStorage.getItem('mf_fileview') === 'grid' ? 'grid' : 'list';
 
-    const needsFetch = force || path !== _lastFileManagerPath || !_lastFileManagerItems;
+    const needsFetch = force || path !== _lastFileManagerPath || !_lastFileManagerItems || !document.getElementById('file-content');
     if (needsFetch) {
       main.innerHTML = `
         <div class="page-header">
@@ -1351,6 +1366,7 @@
 
     // Delegated event handling: one handler on the container instead of per-row.
     const fileContent = document.getElementById('file-content');
+    const btnDeleteSel = document.getElementById('btn-delete-selected');
     if (fileContent && !fileContent._mfDelegated) {
       fileContent._mfDelegated = true;
       fileContent.addEventListener('click', async (e) => {
@@ -1396,22 +1412,26 @@
             fileContent.querySelectorAll('.file-cb').forEach(cb => cb.checked = e.target.checked);
           }
           const count = fileContent.querySelectorAll('.file-cb:checked').length;
-          btnDeleteSel.disabled = count === 0;
-          btnDeleteSel.innerHTML = count > 0 ? `🗑️ 删除选中 (${count})` : '🗑️ 删除选中';
+          if (btnDeleteSel) {
+            btnDeleteSel.disabled = count === 0;
+            btnDeleteSel.innerHTML = count > 0 ? `🗑️ 删除选中 (${count})` : '🗑️ 删除选中';
+          }
         }
       });
     }
 
-    btnDeleteSel.onclick = async () => {
-      const selected = Array.from(fileContent.querySelectorAll('.file-cb:checked')).map(cb => cb.value);
-      if (!selected.length) return;
-      confirmDeleteModal('已选中的 ' + selected.length + ' 个文件', '多文件', async () => {
-        for (const p of selected) {
-          try { await API.deleteFile(p); } catch (e) { /* ignore individual errs */ }
-        }
-        renderFileManager(currentPath, true);
-      });
-    };
+    if (btnDeleteSel) {
+      btnDeleteSel.onclick = async () => {
+        const selected = Array.from(fileContent.querySelectorAll('.file-cb:checked')).map(cb => cb.value);
+        if (!selected.length) return;
+        confirmDeleteModal('已选中的 ' + selected.length + ' 个文件', '多文件', async () => {
+          for (const p of selected) {
+            try { await API.deleteFile(p); } catch (e) { /* ignore individual errs */ }
+          }
+          renderFileManager(currentPath, true);
+        });
+      };
+    }
 
     // Live search filter for the current directory.
     const searchEl = document.getElementById('file-search');
@@ -1564,6 +1584,7 @@
 
     // Handle video ended event
     mediaEl.addEventListener('ended', async () => {
+      if (!document.body.contains(mediaEl)) return;
       const mode = getPlayMode();
       if (mode === 'loop-single') {
         // Safe loop: refresh stream token before playing again to avoid 401 expiration
@@ -1571,10 +1592,12 @@
           const freshUrl = isRemote 
             ? await API.getRemoteStreamUrl(remoteName, filePath)
             : await API.getStreamUrl(filePath);
+          if (!document.body.contains(mediaEl)) return;
           mediaEl.src = freshUrl;
           mediaEl.load();
           mediaEl.play().catch(() => {});
         } catch (e) {
+          if (!document.body.contains(mediaEl)) return;
           mediaEl.currentTime = 0;
           mediaEl.play().catch(() => {});
         }
@@ -1589,6 +1612,7 @@
 
     // Auto-recovery / refresh token when encountering source errors (due to token expiry)
     mediaEl.addEventListener('error', async () => {
+      if (!document.body.contains(mediaEl)) return;
       const err = mediaEl.error;
       // Code 2: NETWORK, Code 4: SRC_NOT_SUPPORTED (returned for auth failure / expired URL)
       if (err && (err.code === 2 || err.code === 4)) {
@@ -1599,10 +1623,15 @@
             ? await API.getRemoteStreamUrl(remoteName, filePath)
             : await API.getStreamUrl(filePath);
           
+          if (!document.body.contains(mediaEl)) return;
           mediaEl.src = freshUrl;
           mediaEl.load();
           
           const onLoaded = () => {
+            if (!document.body.contains(mediaEl)) {
+              mediaEl.removeEventListener('loadedmetadata', onLoaded);
+              return;
+            }
             mediaEl.currentTime = currentTime;
             mediaEl.play().catch(() => {});
             mediaEl.removeEventListener('loadedmetadata', onLoaded);
@@ -1616,6 +1645,10 @@
 
     // Resume when returning to the tab if background policy paused it
     const onVis = () => {
+      if (!document.body.contains(mediaEl)) {
+        document.removeEventListener('visibilitychange', onVis);
+        return;
+      }
       if (!document.hidden && getPlayMode() === 'loop-single' && mediaEl.paused && !mediaEl.ended) {
         mediaEl.play().catch(() => {});
       }
@@ -1892,7 +1925,7 @@
     const remote = slash === -1 ? param : param.slice(0, slash);
     const relPath = slash === -1 ? '' : decodeURIComponent(param.slice(slash + 1));
 
-    const needsFetch = force || param !== _lastNetdiskParam || !_lastNetdiskData;
+    const needsFetch = force || param !== _lastNetdiskParam || !_lastNetdiskData || !document.getElementById('netdisk-content');
     if (needsFetch) {
       main.innerHTML = `
         <div class="page-header"><h1 class="page-title">☁️ 网盘</h1></div>
