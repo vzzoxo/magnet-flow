@@ -52,7 +52,7 @@ npm install --omit=dev --no-audit --no-fund >/dev/null 2>&1 || npm install --pro
 c_ok "依赖包更新完毕"
 
 # 4. Restart magnetflow service
-if systemctl list-unit-files | grep -q '^magnetflow.service'; then
+if [ -f /etc/systemd/system/magnetflow.service ] || systemctl list-unit-files | grep -q 'magnetflow.service'; then
   c_info "正在重启 magnetflow 服务..."
   systemctl daemon-reload
   systemctl restart magnetflow
