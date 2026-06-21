@@ -75,6 +75,20 @@ DOMAIN=dl.example.com LE_EMAIL=you@example.com bash <(curl -sL https://raw.githu
 
 > 可用环境变量覆盖默认：`INSTALL_DIR`、`DOWNLOAD_DIR`、`PORT`、`REPO_URL`。
 
+## 🔄 一键升级
+
+如果您之前已经部署了 MagnetFlow，可以通过以下命令一键升级至最新版本：
+
+```bash
+bash <(curl -sL https://raw.githubusercontent.com/vzzoxo/magnet-flow/main/update.sh)
+```
+
+该升级脚本会自动：
+- 检测 MagnetFlow 的安装路径
+- 自动拉取 GitHub 上的最新代码，强制重置本地修改以防产生合并冲突
+- 检查并更新项目的 npm 依赖包
+- 重新加载并重启 `magnetflow` 系统服务，升级期间保留您的 `.env` 配置、数据库与已登录状态
+
 ## 🌐 绑定域名 + HTTPS（推荐 Caddy，自动证书）
 
 > 一键脚本在交互时填入域名即可**自动完成下面所有步骤**（见上节）。以下为手动配置 / 原理说明，适用于已部署后再加域名的情况。
