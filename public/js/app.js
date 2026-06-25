@@ -629,6 +629,68 @@
   let downloadRefreshTimer = null;
   let renderFrameId = null;
 
+  // Global persistent player state
+  let _currentPlayingPath = null;
+
+  function getOrCreatePlayer(isAudio) {
+    const globalContainer = document.getElementById('global-player-container');
+    if (!globalContainer) return null;
+
+    const id = isAudio ? 'persistent-audio' : 'persistent-video';
+    let player = document.getElementById(id);
+    if (!player) {
+      if (isAudio) {
+        player = document.createElement('audio');
+        player.id = id;
+        player.controls = true;
+        player.autoplay = true;
+        player.preload = 'auto';
+        player.style.width = '100%';
+      } else {
+        player = document.createElement('video');
+        player.id = id;
+        player.controls = true;
+        player.preload = 'auto';
+        player.width = '100%';
+        player.crossOrigin = 'anonymous';
+        player.setAttribute('playsinline', '');
+        player.setAttribute('webkit-playsinline', '');
+        player.setAttribute('x5-playsinline', '');
+        player.setAttribute('x5-video-player-type', 'h5-page');
+        player.innerHTML = '您的浏览器不支持 Video 标签。';
+      }
+      globalContainer.appendChild(player);
+    }
+    return player;
+  }
+
+  function recreatePlayer(isAudio) {
+    const globalContainer = document.getElementById('global-player-container');
+    if (!globalContainer) return null;
+
+    const id = isAudio ? 'persistent-audio' : 'persistent-video';
+    const oldPlayer = document.getElementById(id);
+    if (oldPlayer) {
+      try { oldPlayer.pause(); } catch (e) {}
+      oldPlayer.remove();
+    }
+    return getOrCreatePlayer(isAudio);
+  }
+
+  function preservePersistentPlayer() {
+    const globalContainer = document.getElementById('global-player-container');
+    if (!globalContainer) return;
+    const main = document.getElementById('main-content');
+    if (!main) return;
+
+    const mediaEl = main.querySelector('video, audio');
+    if (mediaEl) {
+      const isAudio = (mediaEl.tagName.toLowerCase() === 'audio');
+      mediaEl.id = isAudio ? 'persistent-audio' : 'persistent-video';
+      globalContainer.appendChild(mediaEl);
+    }
+  }
+
 
   /* ══════════════════════════════════════════════════════
      Authentication
@@ -733,6 +795,9 @@
      ══════════════════════════════════════════════════════ */
 
   function navigate(hash) {
+    // Safely preserve persistent player before cleanup if it exists in main-content
+    preservePersistentPlayer();
+
     // Clean up previous page
     cleanup();
 
@@ -781,25 +846,30 @@
   }
 
   function cleanup() {
-    if (hlsInstance) {
-      try {
-        hlsInstance.destroy();
-      } catch (e) {
-        console.error('[MagnetFlow] Error destroying HLS instance:', e);
+    const main = document.getElementById('main-content');
+    const players = main ? main.querySelectorAll('video, audio') : [];
+
+    // If the media player is still in the main content, it means it is not preserved.
+    // In this case, we clean it up and destroy Hls.
+    if (players.length > 0) {
+      if (hlsInstance) {
+        try {
+          hlsInstance.destroy();
+        } catch (e) {
+          console.error('[MagnetFlow] Error destroying HLS instance:', e);
+        }
+        hlsInstance = null;
       }
-      hlsInstance = null;
+      players.forEach(p => {
+        try {
+          p.pause();
+          p.src = '';
+          p.load();
+        } catch (e) {
+          // Ignore
+        }
+      });
     }
-    // Safely pause and unload any active video/audio players to release decoders
-    const players = document.querySelectorAll('video, audio');
-    players.forEach(p => {
-      try {
-        p.pause();
-        p.src = '';
-        p.load();
-      } catch (e) {
-        // Ignore
-      }
-    });
     if (downloadRefreshTimer) {
       clearInterval(downloadRefreshTimer);
       downloadRefreshTimer = null;
@@ -1582,6 +1652,11 @@
     if (btnPrev) btnPrev.onclick = playPrev;
     if (btnNext) btnNext.onclick = playNext;
 
+    if (mediaEl._playControlsWired) {
+      return;
+    }
+    mediaEl._playControlsWired = true;
+
     // Handle video ended event
     mediaEl.addEventListener('ended', async () => {
       if (!document.body.contains(mediaEl)) return;
@@ -1676,6 +1751,10 @@
         }
       } catch (e) { showToast('画中画不可用: ' + e.message, 'warning'); }
     };
+
+    if (videoEl && videoEl._pipWired) return;
+    if (videoEl) videoEl._pipWired = true;
+
     if (standard) {
       videoEl.addEventListener('enterpictureinpicture', () => btn.classList.add('active'));
       videoEl.addEventListener('leavepictureinpicture', () => btn.classList.remove('active'));
@@ -1696,13 +1775,10 @@
       ? `<div class="audio-player">
            <div class="audio-art">🎵</div>
            <div class="audio-name">${escapeHtml(name)}</div>
-           <audio id="video-player" controls autoplay preload="auto" style="width:100%"></audio>
+           <div id="media-placeholder"></div>
          </div>`
       : `<div class="player-container">
-           <video id="video-player" controls preload="auto" width="100%" crossorigin="anonymous"
-                  playsinline webkit-playsinline x5-playsinline x5-video-player-type="h5-page">
-             您的浏览器不支持 Video 标签。
-           </video>
+           <div id="media-placeholder"></div>
          </div>`;
 
     main.innerHTML = `
@@ -1731,7 +1807,25 @@
       window.location.hash = '#files/' + encodeURIComponent(parentDir);
     };
 
-    const video = document.getElementById('video-player');
+    const isSameFile = (_currentPlayingPath === filePath);
+    let video;
+    if (isSameFile) {
+      video = getOrCreatePlayer(isAudio);
+    } else {
+      if (hlsInstance) {
+        try { hlsInstance.destroy(); } catch(e) {}
+        hlsInstance = null;
+      }
+      video = recreatePlayer(isAudio);
+    }
+
+    video.id = 'video-player';
+    
+    const placeholder = document.getElementById('media-placeholder');
+    if (placeholder) {
+      placeholder.appendChild(video);
+    }
+
     wirePipButton('btn-pip', isAudio ? null : video);
     wirePlayControls({
       mediaEl: video,
@@ -1743,6 +1837,11 @@
       btnModeId: 'btn-loop'
     });
 
+    if (isSameFile) {
+      return;
+    }
+
+    _currentPlayingPath = filePath;
     const streamUrl = await API.getStreamUrl(filePath);
 
     if (!isAudio && filePath.endsWith('.m3u8')) {
@@ -1765,6 +1864,7 @@
       }
     } else {
       video.src = streamUrl;
+      video.play().catch(()=>{});
     }
   }
 
@@ -2028,14 +2128,17 @@
     const name = filePath.split('/').pop();
     const parent = filePath.split('/').slice(0, -1).join('/');
     const kind = isAudioFile(name) ? 'audio' : 'video';
+    const isAudio = kind === 'audio';
 
-    const playerHtml = kind === 'audio'
+    const playerHtml = isAudio
       ? `<div class="audio-player">
            <div class="audio-art">🎵</div>
            <div class="audio-name">${escapeHtml(name)}</div>
-           <audio id="net-media" controls autoplay style="width:100%"></audio>
+           <div id="media-placeholder"></div>
          </div>`
-      : `<div class="player-container"><video id="net-media" controls autoplay preload="auto" width="100%" playsinline webkit-playsinline x5-playsinline x5-video-player-type="h5-page"></video></div>`;
+      : `<div class="player-container">
+           <div id="media-placeholder"></div>
+         </div>`;
 
     main.innerHTML = `
       <div class="page-header flex gap-16 items-center">
@@ -2059,8 +2162,27 @@
       window.location.hash = '#netdisk/' + encodeURIComponent(remote) + (parent ? '/' + encodeURIComponent(parent) : '');
     };
 
-    const el = document.getElementById('net-media');
-    wirePipButton('btn-net-pip', kind === 'audio' ? null : el);
+    const targetPlayPath = 'netplay/' + param;
+    const isSameFile = (_currentPlayingPath === targetPlayPath);
+    let el;
+    if (isSameFile) {
+      el = getOrCreatePlayer(isAudio);
+    } else {
+      if (hlsInstance) {
+        try { hlsInstance.destroy(); } catch(e) {}
+        hlsInstance = null;
+      }
+      el = recreatePlayer(isAudio);
+    }
+
+    el.id = 'net-media';
+
+    const placeholder = document.getElementById('media-placeholder');
+    if (placeholder) {
+      placeholder.appendChild(el);
+    }
+
+    wirePipButton('btn-net-pip', isAudio ? null : el);
     wirePlayControls({
       mediaEl: el,
       isRemote: true,
@@ -2071,8 +2193,14 @@
       btnModeId: 'btn-net-loop'
     });
 
+    if (isSameFile) {
+      return;
+    }
+
+    _currentPlayingPath = targetPlayPath;
     const url = await API.getRemoteStreamUrl(remote, filePath);
     el.src = url;
+    el.play().catch(()=>{});
   }
 
 
